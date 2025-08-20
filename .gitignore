@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+.env*
+# Data & outputs — never commit
+academic_*/
+revelio_patents_*/
+data/
+output/
+logs/
+*.parquet
+*.feather
+*.csv
+*.tsv
+*.jsonl
+*.log
+*.out
+*.err
+tmp/
