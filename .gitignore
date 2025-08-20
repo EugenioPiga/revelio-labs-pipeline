@@ -4,9 +4,8 @@ __pycache__/
 .venv/
 venv/
 .env*
+
 # Data & outputs — never commit
-academic_*/
-revelio_patents_*/
 data/
 output/
 logs/
@@ -19,3 +18,8 @@ logs/
 *.out
 *.err
 tmp/
+
+# Keep placeholders so empty dirs exist in the repo
+!data/.gitkeep
+!output/.gitkeep
+!analyses/report/.gitkeep
