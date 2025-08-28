@@ -1,0 +1,16 @@
+# Core data wrangling
+pandas>=2.0
+numpy>=1.24
+
+# Parallel/distributed
+dask[complete]>=2024.1.0
+pyarrow>=15.0.0
+
+# Plotting
+matplotlib>=3.8
+
+# Scientific utilities
+scipy>=1.11
+
+# Optional (if you use Jupyter for notebooks)
+jupyter
