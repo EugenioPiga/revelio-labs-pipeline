@@ -1,21 +1,28 @@
+# Python cache
 __pycache__/
-*.py[cod]
-.ipynb_checkpoints/
-.venv/
+*.pyc
+*.pyo
+
+# Virtual environments
 venv/
-.env*
-# Data & outputs — never commit
-academic_*/
-revelio_patents_*/
-data/
-output/
+.env/
+
+# Spark / runtime junk
+artifacts/
 logs/
-*.parquet
-*.feather
-*.csv
-*.tsv
-*.jsonl
+data/raw/scratch/
+
+# Processed data (reproducible, too heavy)
+data/processed/
+
+# LaTeX build files
+*.aux
 *.log
 *.out
-*.err
-tmp/
+*.toc
+*.fls
+*.fdb_latexmk
+
+# OS clutter
+.DS_Store
+*~
