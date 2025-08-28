@@ -1,0 +1,229 @@
+================================================================================
+DATASET: academic_company_ref
+================================================================================
+
+                   column  dtype   n_rows  n_missing  missing_frac         mean          std
+                     rcid  int32 29147434          0      0.000000 3.945366e+07 3.909925e+07
+                  company string 29147434          0      0.000000          NaN          NaN
+             primary_name string 29147434          0      0.000000          NaN          NaN
+        factset_entity_id string 29147434   24270088      0.832666          NaN          NaN
+             year_founded  int32 29147434   16625908      0.570407 2.006872e+03 2.441975e+01
+                   ticker string 29147434   29095685      0.998225          NaN          NaN
+            exchange_name string 29147434   29095685      0.998225          NaN          NaN
+                    sedol string 29147434   29133499      0.999522          NaN          NaN
+                     isin string 29147434   29054586      0.996815          NaN          NaN
+                    cusip string 29147434   29053527      0.996778          NaN          NaN
+                      url string 29147434    8959751      0.307394          NaN          NaN
+               naics_code string 29147434   26242379      0.900332          NaN          NaN
+                      cik string 29147434   29015103      0.995460          NaN          NaN
+                      lei string 29147434   28623897      0.982038          NaN          NaN
+             linkedin_url string 29147434     754788      0.025896          NaN          NaN
+               child_rcid  int32 29147434          0      0.000000 3.935247e+07 3.911307e+07
+            child_company string 29147434          0      0.000000          NaN          NaN
+       child_linkedin_url string 29147434     637075      0.021857          NaN          NaN
+     ultimate_parent_rcid  int32 29147434         41      0.000001 3.945753e+07 3.907786e+07
+ultimate_parent_rcid_name string 29147434         41      0.000001          NaN          NaN
+                    gvkey  int32 29147434   29083056      0.997791 2.099406e+05 1.122972e+05
+                      ein  int32 29147434   29101224      0.998415 5.581818e+08 2.837193e+08
+        hq_street_address string 29147434   27416833      0.940626          NaN          NaN
+                  hq_city string 29147434    7495673      0.257164          NaN          NaN
+            hq_metro_area string 29147434    5792408      0.198728          NaN          NaN
+                 hq_state string 29147434    6028310      0.206821          NaN          NaN
+               hq_country string 29147434    5782644      0.198393          NaN          NaN
+                hq_region string 29147434    5782644      0.198393          NaN          NaN
+                rics_k400 string 29147434          0      0.000000          NaN          NaN
+                 rics_k50 string 29147434          0      0.000000          NaN          NaN
+                rics_k200 string 29147434          0      0.000000          NaN          NaN
+              hq_zip_code string 29147434   27434016      0.941215          NaN          NaN
+             phone_number string 29147434   28097897      0.963992          NaN          NaN
+                   slogan string 29147434   19112416      0.655715          NaN          NaN
+              description string 29147434    5171130      0.177413          NaN          NaN
+
+================================================================================
+DATASET: academic_individual_position
+================================================================================
+
+                      column   dtype     n_rows  n_missing  missing_frac          mean          std
+                     user_id   int64 1720304610          0      0.000000  6.874000e+08 6.382200e+08
+                 position_id   int64 1720304610          0      0.000000 -1.340668e+10 5.325064e+18
+                 company_raw  string 1720304610    4418529      0.002568           NaN          NaN
+        company_linkedin_url  string 1720304610  624980995      0.363297           NaN          NaN
+             company_cleaned  string 1720304610   13341018      0.007755           NaN          NaN
+                location_raw  string 1720304610     908700      0.000528           NaN          NaN
+                      region  string 1720304610          0      0.000000           NaN          NaN
+                     country  string 1720304610          0      0.000000           NaN          NaN
+                       state  string 1720304610          0      0.000000           NaN          NaN
+                  metro_area  string 1720304610          0      0.000000           NaN          NaN
+                         msa  string 1720304610          0      0.000000           NaN          NaN
+                        city  string 1720304610          0      0.000000           NaN          NaN
+                   startdate  string 1720304610  289329284      0.168185           NaN          NaN
+                     enddate  string 1720304610  694592041      0.403761           NaN          NaN
+                   title_raw  string 1720304610     816266      0.000474           NaN          NaN
+             job_category_v2  string 1720304610          0      0.000000           NaN          NaN
+                 role_k50_v2  string 1720304610          0      0.000000           NaN          NaN
+                role_k150_v2  string 1720304610          0      0.000000           NaN          NaN
+                role_k300_v2  string 1720304610          0      0.000000           NaN          NaN
+                role_k500_v2  string 1720304610          0      0.000000           NaN          NaN
+               role_k1000_v2  string 1720304610          0      0.000000           NaN          NaN
+               role_k1500_v2  string 1720304610          0      0.000000           NaN          NaN
+                 role_k10_v3  string 1720304610      34913      0.000020           NaN          NaN
+                 role_k50_v3  string 1720304610      34913      0.000020           NaN          NaN
+                role_k150_v3  string 1720304610      34913      0.000020           NaN          NaN
+                role_k500_v3  string 1720304610      34913      0.000020           NaN          NaN
+               role_k1000_v3  string 1720304610      34913      0.000020           NaN          NaN
+               role_k1500_v3  string 1720304610      34913      0.000020           NaN          NaN
+               role_k5000_v3  string 1720304610      34913      0.000020           NaN          NaN
+              role_k10000_v3  string 1720304610      34913      0.000020           NaN          NaN
+              role_k15000_v3  string 1720304610      34913      0.000020           NaN          NaN
+              mapped_role_v3  string 1720304610      34913      0.000020           NaN          NaN
+          remote_suitability float32 1720304610          0      0.000000  5.239765e-01 2.577075e-01
+                      weight float32 1720304610          0      0.000000  1.326333e+00 4.650581e-01
+                 description  string 1720304610 1104016281      0.641756           NaN          NaN
+                start_salary float64 1720304610     555802      0.000323  4.163566e+04 3.899004e+04
+                  end_salary float64 1720304610     243171      0.000141  4.939291e+04 4.756805e+04
+                   seniority   int16 1720304610          0      0.000000  2.325348e+00 1.470696e+00
+                      salary float32 1720304610     243171      0.000141  4.939292e+04 4.756805e+04
+             position_number   int16 1720304610          0      0.000000  3.428684e+00 3.877980e+00
+                        rcid   int64 1720304610  461626146      0.268340  1.072390e+07 2.340866e+07
+                company_name  string 1720304610  461814653      0.268449           NaN          NaN
+        ultimate_parent_rcid   int64 1720304610  461660921      0.268360  1.233897e+07 2.447326e+07
+ultimate_parent_company_name  string 1720304610  461849428      0.268470           NaN          NaN
+                   onet_code  string 1720304610   39567465      0.023000           NaN          NaN
+                  onet_title  string 1720304610   39567465      0.023000           NaN          NaN
+                      ticker  string 1720304610 1514103156      0.880137           NaN          NaN
+                    exchange  string 1720304610 1514103156      0.880137           NaN          NaN
+                       cusip  string 1720304610 1454183169      0.845306           NaN          NaN
+                  naics_code  string 1720304610  469739447      0.273056           NaN          NaN
+           naics_description  string 1720304610  469739447      0.273056           NaN          NaN
+                    rics_k50  string 1720304610  461907913      0.268504           NaN          NaN
+                   rics_k200  string 1720304610  461907913      0.268504           NaN          NaN
+                   rics_k400  string 1720304610  461907913      0.268504           NaN          NaN
+  ultimate_parent_factset_id  string 1720304610  723909751      0.420803           NaN          NaN
+ultimate_parent_factset_name  string 1720304610  724093685      0.420910           NaN          NaN
+          total_compensation float32 1720304610     252482      0.000147  6.621227e+04 1.037713e+05
+     additional_compensation float32 1720304610     252482      0.000147  1.681936e+04 7.007598e+04
+            title_translated  string 1720304610    1602102      0.000931           NaN          NaN
+
+================================================================================
+DATASET: academic_individual_user
+================================================================================
+
+              column                dtype    n_rows  n_missing  missing_frac         mean          std
+             user_id                int64 618161168          0      0.000000 8.895282e+08 7.596373e+08
+           firstname               string 618161168    1636782      0.002648          NaN          NaN
+            lastname               string 618161168   19522237      0.031581          NaN          NaN
+            fullname               string 618161168     121168      0.000196          NaN          NaN
+              f_prob              float64 618161168          0      0.000000 4.546071e-01 4.256351e-01
+              m_prob              float64 618161168          0      0.000000 5.453929e-01 4.256351e-01
+          white_prob              float64 618161168          0      0.000000 4.828398e-01 4.206830e-01
+          black_prob              float64 618161168          0      0.000000 9.537203e-02 2.161411e-01
+            api_prob              float64 618161168          0      0.000000 2.488714e-01 3.961524e-01
+       hispanic_prob              float64 618161168          0      0.000000 1.401024e-01 2.997872e-01
+         native_prob              float64 618161168          0      0.000000 5.676056e-03 2.279622e-02
+       multiple_prob              float64 618161168          0      0.000000 2.713826e-02 7.372952e-02
+            prestige              float64 618161168          0      0.000000 1.211860e-01 4.016048e-01
+      highest_degree               string 618161168          0      0.000000          NaN          NaN
+       sex_predicted               string 618161168          0      0.000000          NaN          NaN
+ ethnicity_predicted               string 618161168      92232      0.000149          NaN          NaN
+profile_linkedin_url               string 618161168          0      0.000000          NaN          NaN
+       user_location               string 618161168    2303447      0.003726          NaN          NaN
+        user_country               string 618161168          0      0.000000          NaN          NaN
+       profile_title               string 618161168   37316772      0.060367          NaN          NaN
+          updated_dt date32[day][pyarrow] 618161168          0      0.000000          NaN          NaN
+      numconnections                int32 618161168   88836929      0.143712 1.126883e+02 1.674544e+02
+     profile_summary               string 618161168  174366344      0.282073          NaN          NaN
+
+================================================================================
+DATASET: academic_individual_user_education
+================================================================================
+
+                     column                dtype    n_rows  n_missing  missing_frac         mean          std
+                    user_id                int64 635641154          0      0.000000 7.460724e+08 6.834120e+08
+             university_raw               string 635641154     202512      0.000319          NaN          NaN
+            university_name               string 635641154  164208580      0.258335          NaN          NaN
+                       rsid                int32 635641154  163236053      0.256805 1.269479e+05 7.918001e+04
+           education_number                int32 635641154          0      0.000000 1.928239e+00 2.240279e+00
+                  startdate date32[day][pyarrow] 635641154  102386150      0.161075          NaN          NaN
+                    enddate date32[day][pyarrow] 635641154  117446272      0.184768          NaN          NaN
+                     degree               string 635641154          0      0.000000          NaN          NaN
+                      field               string 635641154          0      0.000000          NaN          NaN
+                 degree_raw               string 635641154  119831939      0.188521          NaN          NaN
+                  field_raw               string 635641154  167681819      0.263800          NaN          NaN
+         university_country               string 635641154  178278023      0.280470          NaN          NaN
+        university_location               string 635641154  230819964      0.363129          NaN          NaN
+ultimate_parent_school_name               string 635641154  164208580      0.258335          NaN          NaN
+       ultimate_parent_rsid                int32 635641154  164208580      0.258335 1.271071e+05 7.814954e+04
+                description               string 635641154  531816647      0.836662          NaN          NaN
+
+================================================================================
+DATASET: academic_individual_user_skill
+================================================================================
+
+      column  dtype     n_rows  n_missing  missing_frac         mean          std
+     user_id  int64 7152322703          0           0.0 6.137863e+08 5.858938e+08
+   skill_raw string 7152322703          0           0.0          NaN          NaN
+skill_source string 7152322703          0           0.0          NaN          NaN
+skill_mapped string 7152322703          0           0.0          NaN          NaN
+   skill_k25 string 7152322703          0           0.0          NaN          NaN
+   skill_k50 string 7152322703          0           0.0          NaN          NaN
+   skill_k75 string 7152322703          0           0.0          NaN          NaN
+
+================================================================================
+DATASET: revelio_patents_assignee_matches
+================================================================================
+
+                                    column                      dtype  n_rows  n_missing  missing_frac         mean          std
+                                 patent_id                     string 6602862          0      0.000000          NaN          NaN
+                               patent_date                     string 6602862          0      0.000000          NaN          NaN
+                              patent_title                     string 6602862          0      0.000000          NaN          NaN
+                            application_id                     string 6602862       1510      0.000229          NaN          NaN
+                               filing_date                     string 6602862       1510      0.000229          NaN          NaN
+                         assignee_sequence                     string 6602862          0      0.000000          NaN          NaN
+                             assignee_type                     string 6602862          0      0.000000          NaN          NaN
+        raw_assignee_individual_name_first                     string 6602862    6602839      0.999997          NaN          NaN
+         raw_assignee_individual_name_last                     string 6602862    6602839      0.999997          NaN          NaN
+                 raw_assignee_organization                     string 6602862          0      0.000000          NaN          NaN
+                            pv_assignee_id                     string 6602862          0      0.000000          NaN          NaN
+pv_disambig_assignee_individual_name_first                     string 6602862    6532044      0.989275          NaN          NaN
+ pv_disambig_assignee_individual_name_last                     string 6602862    6532044      0.989275          NaN          NaN
+         pv_disambig_assignee_organization                     string 6602862          0      0.000000          NaN          NaN
+                                      rcid decimal128(38, 5)[pyarrow] 6602862          0      0.000000 6.640311e+06 1.429196e+07
+                              company_name                     string 6602862          0      0.000000          NaN          NaN
+
+================================================================================
+DATASET: revelio_patents_inventor_matches
+================================================================================
+
+                                    column                dtype  n_rows  n_missing  missing_frac         mean          std
+                                 patent_id               string 7149690          0      0.000000          NaN          NaN
+                               patent_date date32[day][pyarrow] 7149690          0      0.000000          NaN          NaN
+                              patent_title               string 7149690          0      0.000000          NaN          NaN
+                            application_id               string 7149690        625      0.000087          NaN          NaN
+                               filing_date date32[day][pyarrow] 7149690        625      0.000087          NaN          NaN
+                         inventor_sequence               string 7149690          0      0.000000          NaN          NaN
+                   raw_inventor_name_first               string 7149690          0      0.000000          NaN          NaN
+                    raw_inventor_name_last               string 7149690          0      0.000000          NaN          NaN
+                            pv_inventor_id               string 7149690          0      0.000000          NaN          NaN
+pv_disambig_inventor_individual_name_first               string 7149690          0      0.000000          NaN          NaN
+ pv_disambig_inventor_individual_name_last               string 7149690          0      0.000000          NaN          NaN
+                 inventor_fullname_cleaned               string 7149690          0      0.000000          NaN          NaN
+                inventor_firstname_cleaned               string 7149690          0      0.000000          NaN          NaN
+                 inventor_lastname_cleaned               string 7149690          0      0.000000          NaN          NaN
+                                   user_id                int64 7149690          0      0.000000 4.513265e+08 4.104148e+08
+                             user_fullname               string 7149690        590      0.000083          NaN          NaN
+                            user_firstname               string 7149690        925      0.000129          NaN          NaN
+                             user_lastname               string 7149690        608      0.000085          NaN          NaN
+                     user_fullname_cleaned               string 7149690          0      0.000000          NaN          NaN
+                    user_firstname_cleaned               string 7149690        952      0.000133          NaN          NaN
+                     user_lastname_cleaned               string 7149690        709      0.000099          NaN          NaN
+                user_linkedin_patent_count                int32 7149690          0      0.000000 3.337522e+00 1.328476e+01
+                 user_profile_linkedin_url               string 7149690        590      0.000083          NaN          NaN
+                 similarity_score_fullname              float64 7149690          0      0.000000 9.823774e-01 2.578774e-02
+                similarity_score_firstname              float64 7149690        952      0.000133 9.751055e-01 3.641021e-02
+                 similarity_score_lastname              float64 7149690        709      0.000099 9.984550e-01 1.949041e-02
+                     linkedin_patent_match                int32 7149690          0      0.000000 5.120795e-02 2.204217e-01
+                                rcid_match                int32 7149690          0      0.000000 8.121948e-01 3.905566e-01
+                           rcid_date_match                int32 7149690          0      0.000000 5.524128e-01 4.972453e-01
+                        ult_par_rcid_match                int32 7149690          0      0.000000 9.866924e-01 1.145883e-01
+                   ult_par_rcid_date_match                int32 7149690          0      0.000000 6.519134e-01 4.763637e-01
+
