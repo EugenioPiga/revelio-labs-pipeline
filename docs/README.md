@@ -51,7 +51,7 @@ Slurm batch scripts for HPC execution.
 - **`analysis/`**: one-off analysis jobs (e.g., patent assignee analysis, size distributions).  
 - **`pipelines/`**: main ETL pipeline jobs.  
   - `step1_inventors_matched_users.sbatch`: build inventor–user base.  
-  - `step2_inventors_matched_positions*.sbatch`: link inventors to positions.  
+  - STILL IN PROGRESS `step2_inventors_matched_positions*.sbatch`: link inventors to positions.  
   - `step3_inventors_matched_education*.sbatch`: link inventors to education.  
   - `enrich_inventor_education.sbatch`: enrich inventor records with education.  
   - `inventor_level_file.sbatch`: aggregate into inventor-level dataset.  
