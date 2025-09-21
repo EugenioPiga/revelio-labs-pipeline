@@ -7,8 +7,8 @@ and all scripts will work everywhere.
 
 from pathlib import Path
 
-# 🔧 Change this to your base directory
-BASE_PATH = Path("/yourpath/innovation_linkedin")
+# Change this to your base directory
+BASE_PATH = Path("/home/epiga/innovation_linkedin")
 
 # Data folders
 DATA_RAW = BASE_PATH / "data" / "raw"
