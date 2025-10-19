@@ -1,34 +1,47 @@
-# Python cache
+# ===============================
+# PYTHON AND ENVIRONMENTS
+# ===============================
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+*.pdb
 
 # Virtual environments
 venv/
 .env/
 
-# Spark / runtime junk
+# ===============================
+# DATA AND OUTPUTS
+# ===============================
+# Raw & intermediate data
+data/raw/scratch/
+data/processed/
+
+# Artifacts / logs / Spark temp dirs
 artifacts/
 logs/
-data/raw/scratch/
 
-# Processed data (reproducible, too heavy)
-data/processed/
-logs/
-
-# Ignore parquet + large files
+# Large data files
 *.parquet
 *.csv
 *.tsv
 
-# LaTeX build files
+# ===============================
+# LATEX BUILD FILES
+# ===============================
 *.aux
 *.log
 *.out
 *.toc
 *.fls
 *.fdb_latexmk
+*.synctex.gz
 
-# OS clutter
+# ===============================
+# MISC / OS CLUTTER
+# ===============================
 .DS_Store
 *~
+*.bak
+*.tmp
