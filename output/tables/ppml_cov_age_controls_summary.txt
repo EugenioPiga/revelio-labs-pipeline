@@ -1,0 +1,14 @@
+=== PPML with Age Controls ===
+Poisson estimation, Dep. Var.: n_patents
+Observations: 16,638,405
+Fixed-effects: user_id: 762,353,  first_rcid: 174,182,  first_city:
+18,351,  year: 49
+Standard-errors: IID 
+        Estimate Std. Error  z value  Pr(>|z|)    
+age_sq -0.000306   3.06e-06 -99.9455 < 2.2e-16 ***
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+Log-Likelihood: -23,067,476.2   Adj. Pseudo R2: 0.233331
+           BIC:  62,012,837.5     Squared Cor.: 0.596012
+
+Runtime (seconds): 1044.164 

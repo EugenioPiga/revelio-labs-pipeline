@@ -1,0 +1,4 @@
+Rows: 22443183
+Cols: 39
+Inventors: 1236138
+Years: Row(min(year)=1950, max(year)=2025)

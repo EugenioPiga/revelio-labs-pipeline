@@ -1,0 +1,14 @@
+=== With Covariates ===
+Poisson estimation, Dep. Var.: n_patents
+Observations: 11,903,273
+Fixed-effects: user_id: 626,726,  first_rcid: 153,885,  first_city:
+16,895,  year: 49,  first_university: 23,411
+Standard-errors: IID 
+                 Estimate Std. Error   z value Pr(>|z|) 
+years_since_edu -0.000284   0.002397 -0.118562  0.90562 
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+Log-Likelihood: -16,490,194.8   Adj. Pseudo R2: 0.229463
+           BIC:  46,355,784.7     Squared Cor.: 0.599033
+
+Runtime (seconds): 1025.727 

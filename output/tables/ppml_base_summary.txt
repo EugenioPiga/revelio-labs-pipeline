@@ -1,0 +1,9 @@
+=== Baseline PPML ===
+Poisson estimation, Dep. Var.: n_patents
+Observations: 16,638,405
+Fixed-effects: user_id: 762,353,  first_rcid: 174,182,  first_city:
+18,351,  year: 49
+Log-Likelihood: -23,072,810.0   Adj. Pseudo R2: 0.233161
+           BIC:  62,023,488.4     Squared Cor.: 0.595517
+
+Runtime (seconds): 726.5782 

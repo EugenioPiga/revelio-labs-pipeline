@@ -1,8 +1,8 @@
 #!/bin/bash
-#SBATCH --job-name=merge_uspto
+#SBATCH --job-name=merge_uspto_dask
 #SBATCH --output=logs/merge_uspto_%j.out
 #SBATCH --error=logs/merge_uspto_%j.err
-#SBATCH --time=2-00:00:00          # 2 days
+#SBATCH --time=1-00:00:00
 #SBATCH --partition=general
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=16
@@ -18,3 +18,4 @@ echo "Starting merge job at $(date)"
 python /home/epiga/revelio_labs/merge_uspto.py
 
 echo "Job finished at $(date)"
+

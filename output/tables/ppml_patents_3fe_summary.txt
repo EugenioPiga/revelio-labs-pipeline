@@ -1,0 +1,8 @@
+Poisson estimation, Dep. Var.: n_patents
+Observations: 14,558,604
+Fixed-effects: user_id: 762,353,  first_rcid: 174,183,  first_city:
+18,351,  year: 49
+Log-Likelihood: -20,188,708.6   Adj. Pseudo R2: 0.228807
+           BIC:  56,127,788.6     Squared Cor.: 0.595516
+
+Runtime (seconds): 618.7802 

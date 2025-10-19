@@ -1,0 +1,5 @@
+OLS estimation, Dep. Var.: n_patents
+Observations: 14,558,604
+Fixed-effects: user_id: 762,353,  first_rcid: 174,183,  first_city:
+18,351
+RMSE: 1.94764   Adj. R2: 0.51581
