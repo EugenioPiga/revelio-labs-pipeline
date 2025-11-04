@@ -1,8 +1,8 @@
 #!/usr/bin/env Rscript
 
 ###############################################################################
-# ppml_patents_baseline_fepois.R
-# Baseline PPML using fixest::fepois (multi-FE)
+# ppml_patents_baseline_feglm.R
+# Baseline PPML using alpaca::feglm (multi-FE)
 # Author: Eugenio
 ###############################################################################
 
@@ -13,29 +13,41 @@ user_lib <- "~/R/library"
 if (!dir.exists(user_lib)) dir.create(user_lib, recursive = TRUE)
 .libPaths(c(user_lib, .libPaths()))
 
-packages <- c("arrow", "fixest", "dplyr", "readr", "broom", "lubridate")
+base_pkgs <- c("arrow", "dplyr", "readr", "broom", "lubridate")
 installed <- rownames(installed.packages())
-for (pkg in packages) {
+for (pkg in base_pkgs) {
   if (!pkg %in% installed) {
     install.packages(pkg, repos = "https://cloud.r-project.org", lib = user_lib)
   }
 }
 
+# Install remotes if needed
+if (!requireNamespace("remotes", quietly = TRUE)) {
+  install.packages("remotes", repos = "https://cloud.r-project.org", lib = user_lib)
+}
+
+# Try to install alpaca if missing
+if (!requireNamespace("alpaca", quietly = TRUE)) {
+  cat("[INFO] Installing alpaca from GitHub...\n")
+  remotes::install_github("amrei-stammann/alpaca", lib = user_lib, dependencies = TRUE)
+}
+
+# Load libraries
 library(arrow)
 library(dplyr)
 library(readr)
 library(broom)
 library(lubridate)
-library(fixest)
-cat("[DEBUG] fixest loaded:", "fixest" %in% loadedNamespaces(), "\n")
+library(alpaca)
+cat("[DEBUG] alpaca loaded:", "alpaca" %in% loadedNamespaces(), "\n")
 
 # ============================
 # Config
 # ============================
 INPUT <- "/labs/khanna/linkedin_202507/processed/inventor_year_merged"
 OUT_DIR <- "/home/epiga/revelio_labs/output/regressions"
-BASE_FILE <- file.path(OUT_DIR, "ppml_baseline_fepois.rds")
-SUMMARY_FILE <- file.path(OUT_DIR, "ppml_baseline_fepois_summary.txt")
+BASE_FILE <- file.path(OUT_DIR, "ppml_baseline_feglm.rds")
+SUMMARY_FILE <- file.path(OUT_DIR, "ppml_baseline_feglm_summary.txt")
 
 dir.create(OUT_DIR, showWarnings = FALSE, recursive = TRUE)
 
@@ -60,35 +72,30 @@ df <- df %>%
 cat("[INFO] Filtered sample (year >= 1990). Rows remaining:", nrow(df), "\n")
 
 # ============================
-# Baseline PPML (fixest::fepois)
+# Baseline PPML (alpaca::feglm)
 # ============================
-cat("[INFO] Running baseline PPML with fixest::fepois...\n")
+cat("[INFO] Running baseline PPML with alpaca::feglm...\n")
 start_base <- Sys.time()
 
-# ---- Safe configuration ----
-# Use multi-threading if available
-if ("nthreads" %in% names(formals(fixest::setFixest_nthreads))) {
-  fixest::setFixest_nthreads(8)  # fewer threads = less memory fragmentation
-} else if ("threads" %in% names(formals(fixest::setFixest_threads))) {
-  fixest::setFixest_threads(8)
-}
-
-options(fixest_df = "none")  # don't store vcov
-
-# ---- Reduce memory pressure ----
-gc()  # clear memory before running
-cat("[INFO] Starting fepois estimation on full sample...\n")
+# ---- Memory & threading notes ----
+# alpaca::feglm does not use explicit thread control;
+# it handles memory internally and is often more stable for large FE sets.
+gc()
 flush.console()
+packageVersion("alpaca")
 
-ppml_base <- fixest::fepois(
-  n_patents ~ 1 | user_id + first_rcid + first_city + year,
+ppml_base <- alpaca::feglm(
+  formula = n_patents ~ 1 | user_id + first_rcid + first_city + year,
   data = df,
-  lean = TRUE,        # don't keep full design matrix
-  mem.clean = TRUE,   # release temporary objects aggressively
-  nthreads = 8,       # safer than 16
-  fixef.rm = "none",  # ensure full FE kept
-  warn = TRUE
+  family = poisson(link = "log"),
+  control = alpaca::feglmControl(
+    dev.tol = 1e-8,
+    center.tol = 1e-8,
+    iter.max = 100,
+    trace = TRUE   # prints iteration progress
+  )
 )
+
 end_base <- Sys.time()
 runtime_base <- as.numeric(difftime(end_base, start_base, units = "secs"))
 cat("[INFO] Baseline PPML runtime:", runtime_base, "seconds\n")
@@ -99,7 +106,7 @@ cat("[INFO] Baseline PPML runtime:", runtime_base, "seconds\n")
 saveRDS(ppml_base, BASE_FILE)
 
 sink(SUMMARY_FILE)
-cat("=== Baseline PPML (fixest::fepois) ===\n")
+cat("=== Baseline PPML (alpaca::feglm) ===\n")
 print(summary(ppml_base))
 cat("\nRuntime (seconds):", runtime_base, "\n")
 sink()
@@ -110,10 +117,10 @@ cat("[INFO] Summary saved to:", SUMMARY_FILE, "\n")
 # ============================
 cat("[INFO] Extracting fixed effects...\n")
 
-FE_DIR <- file.path(OUT_DIR, "ppml_baseline_fepois_fe")
+FE_DIR <- file.path(OUT_DIR, "ppml_baseline_feglm_fe")
 dir.create(FE_DIR, showWarnings = FALSE, recursive = TRUE)
 
-fe_list <- fixef(ppml_base)
+fe_list <- alpaca::getFEs(ppml_base)
 
 for (fe_name in names(fe_list)) {
   fe_df <- tibble(level = names(fe_list[[fe_name]]), fe = as.numeric(fe_list[[fe_name]]))
@@ -168,7 +175,7 @@ if (!is.null(fe_city))  decomp <- decomp %>% left_join(fe_city,  by = "first_cit
 if (!is.null(fe_year))  decomp <- decomp %>% left_join(fe_year,  by = "year")
 
 # Save decomposition
-out_decomp <- file.path(OUT_DIR, "decomposition_joined_baseline_fepois.csv")
+out_decomp <- file.path(OUT_DIR, "decomposition_joined_baseline_feglm.csv")
 write_csv(decomp, out_decomp)
 cat("[INFO] Decomposition file saved to:", out_decomp, "\n")
 
@@ -177,4 +184,4 @@ cat("[INFO] Decomposition file saved to:", out_decomp, "\n")
 # ============================
 global_end <- Sys.time()
 cat("[INFO] Total runtime (seconds):", round(as.numeric(global_end - global_start), 2), "\n")
-cat("[INFO] Baseline PPML (fixest::fepois) and decomposition completed successfully.\n")
+cat("[INFO] Baseline PPML (alpaca::feglm) and decomposition completed successfully.\n")
