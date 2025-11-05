@@ -13,7 +13,7 @@ user_lib <- "~/R/library"
 if (!dir.exists(user_lib)) dir.create(user_lib, recursive = TRUE)
 .libPaths(c(user_lib, .libPaths()))
 
-pkgs <- c("readr", "dplyr", "broom")
+pkgs <- c("readr", "dplyr", "broom", "ggplot2")
 for (p in pkgs)
   if (!requireNamespace(p, quietly = TRUE))
     install.packages(p, repos = "https://cloud.r-project.org", lib = user_lib)
@@ -161,20 +161,36 @@ for (v in versions) {
   cat("[INFO] Running covariate-based decomposition (β)...\n")
 
   city_inventors <- decomp %>%
+    filter(year == BASE_YEAR) %>%
     group_by(first_city) %>%
     summarise(n_inventors = n_distinct(user_id), .groups = "drop") %>%
-    mutate(log_inventors = log1p(n_inventors))
+    mutate(log_inventors = log(n_inventors))
 
   city_cov_data <- city_summary %>%
+    left_join(city_means, by = "first_city") %>%
     left_join(city_inventors, by = "first_city")
 
-  cov_reg_total <- lm(log1p(mean_fe_city + mean_fe_firm + mean_fe_user) ~ log_inventors,
+  city_cov_data <- city_cov_data %>%
+   mutate(
+     log_mean_patents = ifelse(is.infinite(log_mean_patents), NA, log_mean_patents),
+     log_inventors = ifelse(is.infinite(log_inventors), NA, log_inventors),
+
+     sum_fe = (mean_fe_city + mean_fe_firm + mean_fe_user)
+    )
+
+  # sanity check: correlation between log_mean_patents and sum_fe
+  qplot(log_mean_patents, sum_fe, data = city_cov_data)
+
+  cov_reg_original <- lm(log_mean_patents ~ log_inventors,
+                      data = city_cov_data)
+  cov_reg_total <- lm(sum_fe ~ log_inventors,
                       data = city_cov_data)
   cov_reg_user  <- lm(mean_fe_user ~ log_inventors, data = city_cov_data)
   cov_reg_firm  <- lm(mean_fe_firm ~ log_inventors, data = city_cov_data)
   cov_reg_city  <- lm(mean_fe_city ~ log_inventors, data = city_cov_data)
 
   cov_results <- bind_rows(
+    tidy(cov_reg_original) %>% mutate(component = "Original"),
     tidy(cov_reg_total) %>% mutate(component = "Total_FE"),
     tidy(cov_reg_user)  %>% mutate(component = "Inventor_FE"),
     tidy(cov_reg_firm)  %>% mutate(component = "Firm_FE"),
