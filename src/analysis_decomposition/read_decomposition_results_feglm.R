@@ -22,14 +22,17 @@ invisible(lapply(pkgs, library, character.only = TRUE))
 # ----------------------------
 # Config: list of decomposition files
 # ----------------------------
-OUT_DIR <- "/home/epiga/revelio_labs/output/regressions"
+OUT_DIR <- "/home/gps-yuhei/revelio_labs/output/regressions"
 
 versions <- c(
-  "baseline_feglm",
-  "baseline_top10_feglm",
-  "covariates_feglm",
-  "covariates_feglm_top10"
+  "baseline_feglm"#,
+#   "baseline_top10_feglm",
+#   "covariates_feglm",
+#   "covariates_feglm_top10"
 )
+
+# pick specific year for decomposition
+BASE_YEAR <- 2010
 
 # ----------------------------
 # Loop through versions
@@ -63,6 +66,7 @@ for (v in versions) {
   cat("[INFO] Creating city-level summary...\n")
 
   city_summary <- decomp %>%
+    filter(year == BASE_YEAR) %>%
     group_by(first_city) %>%
     summarise(
       mean_fe_city  = mean(fe_first_city, na.rm = TRUE),
@@ -80,6 +84,7 @@ for (v in versions) {
   cat("[INFO] Creating firm-level summary...\n")
 
   firm_summary <- decomp %>%
+    filter(year == BASE_YEAR) %>%
     group_by(first_rcid) %>%
     summarise(
       mean_fe_firm = mean(fe_first_rcid, na.rm = TRUE),
@@ -97,9 +102,10 @@ for (v in versions) {
   cat("[INFO] Running regression-based decomposition (α)...\n")
 
   city_means <- decomp %>%
+    filter(year == BASE_YEAR) %>%
     group_by(first_city) %>%
     summarise(mean_patents = mean(n_patents, na.rm = TRUE), .groups = "drop") %>%
-    mutate(log_mean_patents = log1p(mean_patents))
+    mutate(log_mean_patents = log(mean_patents))
 
   city_data <- city_summary %>%
     left_join(city_means, by = "first_city")
