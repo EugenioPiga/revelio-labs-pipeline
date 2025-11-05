@@ -1,8 +1,18 @@
 #!/usr/bin/env python
 # %%
+import os
 from pathlib import Path
 
-from pyspark.sql import SparkSession, functions as F
+try:
+    from pyspark.sql import SparkSession, functions as F
+except ModuleNotFoundError as exc:  # pragma: no cover
+    raise SystemExit(
+        "PySpark is required to run this inspection script.\n"
+        "Activate the project virtualenv (e.g. `source venv/bin/activate`) "
+        "or install pyspark in your current environment."
+    ) from exc
+
+os.environ.setdefault("SPARK_LOCAL_IP", "127.0.0.1")
 
 # %%
 # Configure input locations (edit as needed)
@@ -10,12 +20,24 @@ duplicates_path = Path("/home/gps-yuhei/revelio_labs/output/userid_pvid_correspo
 
 # %%
 # Start Spark session
-spark = (
-    SparkSession.builder
-    .appName("inspect_pvid_duplicates")
-    .getOrCreate()
-)
-spark.sparkContext.setLogLevel("WARN")
+try:
+    spark = (
+        SparkSession.builder
+        .master("local[*]")
+        .appName("inspect_pvid_duplicates")
+        .config("spark.driver.host", "127.0.0.1")
+        .config("spark.driver.bindAddress", "127.0.0.1")
+        .config("spark.ui.enabled", "false")
+        .config("spark.sql.warehouse.dir", str(Path("./spark-warehouse").resolve()))
+        .getOrCreate()
+    )
+    spark.sparkContext.setLogLevel("WARN")
+except Exception as exc:  # pragma: no cover
+    raise SystemExit(
+        "Failed to start a local Spark session. This environment may prohibit socket binding.\n"
+        "Please rerun this script on a machine where Spark can start (e.g., the cluster login node).\n"
+        f"Original error: {exc}"
+    ) from exc
 
 # %%
 # Load all parquet files and cache consolidated DataFrame
@@ -28,6 +50,35 @@ print(f"[INFO] Loaded {total_rows:,} duplicate rows from {duplicates_path}")
 # Inspect schema and a few sample rows
 duplicates_df.printSchema()
 duplicates_df.show(10, truncate=False)
+
+# %%
+# Target user IDs to inspect
+target_user_ids = [100815327, 116965573, 129204179, 130104932]
+
+target_rows = duplicates_df.filter(F.col("user_id").isin(target_user_ids))
+
+print("\n[INFO] Duplicate rows for selected user_id values")
+target_rows.orderBy("user_id", "PV_INVENTOR_ID").show(truncate=False)
+
+# %%
+# Load inventor_year_merged and inspect the same user IDs
+inventor_year_path = Path("/labs/khanna/linkedin_202507/processed/inventor_year_merged")
+if inventor_year_path.exists():
+    inventor_year_df = spark.read.parquet(str(inventor_year_path))
+    inventor_year_df.cache()
+
+    print(f"[INFO] Loaded inventor_year_merged with {inventor_year_df.count():,} rows")
+
+    inventor_year_subset = (
+        inventor_year_df
+        .filter(F.col("user_id").isin(target_user_ids))
+        .orderBy("user_id", "year")
+    )
+
+    print("\n[INFO] inventor_year_merged rows for selected user_id values")
+    inventor_year_subset.show(50, truncate=False)
+else:
+    print(f"[WARN] inventor_year_merged path not found or inaccessible: {inventor_year_path}")
 
 # %%
 # Summaries: user_id mapping to multiple PV IDs, and vice versa
