@@ -79,7 +79,11 @@ for (geo in geographies) {
   group_col <- geo$column
 
   summary_df <- dataset %>%
-    filter(!is.na(.data[[group_col]]), .data[[group_col]] != "") %>%
+    filter(
+      !is.na(.data[[group_col]]),
+      .data[[group_col]] != "",
+      tolower(.data[[group_col]]) != "empty"
+    ) %>%
     group_by(level = .data[[group_col]]) %>%
     summarise(
       num_inventors = n_distinct(user_id),
