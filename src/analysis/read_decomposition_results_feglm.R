@@ -1,9 +1,9 @@
 #!/usr/bin/env Rscript
 ###############################################################################
 # read_decomposition_results_all_feglm.R
-# Run decomposition analysis (regression, covariance, correlation)
-# for all FEGLM models: baseline, top10, tenure, tenure-top10
-# Author: Eugenio — 2025-10-24
+# Decomposition analysis (α, β, covariance/correlation)
+# for baseline and covariates FEGLM models
+# Author: Eugenio — updated 2025-10-30
 ###############################################################################
 
 # ----------------------------
@@ -58,81 +58,143 @@ for (v in versions) {
   print(colnames(decomp))
 
   # ----------------------------
-  # City-level summary
+  # Focus on one specific year
   # ----------------------------
-  cat("[INFO] Creating city-level summary...\n")
+  target_year <- "2010"
+  if ("year" %in% colnames(decomp)) {
+    decomp <- decomp %>% filter(year == target_year)
+    cat("[INFO] Filtering decomposition to year =", target_year, "\n")
+    cat("[INFO] Rows after year filter:", nrow(decomp), "\n")
+  }
 
-  city_summary <- decomp %>%
-    group_by(first_city) %>%
+  # ----------------------------
+  # Aggregation
+  # ----------------------------
+  cat("[INFO] Aggregating to city-year level...\n")
+  agg_city <- decomp %>%
+    group_by(first_city, year) %>%
     summarise(
-      mean_fe_city  = mean(fe_first_city, na.rm = TRUE),
-      mean_fe_firm  = mean(fe_first_rcid, na.rm = TRUE),
-      mean_fe_user  = mean(fe_user_id, na.rm = TRUE),
-      n_obs = n(),
+      mean_patents = mean(n_patents, na.rm = TRUE),
+      E_user = mean(fe_user_id, na.rm = TRUE),
+      E_firm = mean(fe_first_rcid, na.rm = TRUE),
+      E_city = mean(fe_first_city, na.rm = TRUE),
+      E_year = mean(fe_year, na.rm = TRUE),
+      mean_tenure = if ("tenure" %in% names(.)) mean(tenure, na.rm = TRUE) else NA,
+      mean_tenure_sq = if ("tenure_sq" %in% names(.)) mean(tenure_sq, na.rm = TRUE) else NA,
       .groups = "drop"
     ) %>%
-    arrange(desc(n_obs))
-  write_csv(city_summary, file.path(OUT_DIR, paste0("city_decomposition_summary_", v, ".csv")))
+    filter(mean_patents > 0) %>%
+    mutate(log_E_patents = log(mean_patents))
 
   # ----------------------------
-  # Firm-level summary
-  # ----------------------------
-  cat("[INFO] Creating firm-level summary...\n")
-
-  firm_summary <- decomp %>%
-    group_by(first_rcid) %>%
-    summarise(
-      mean_fe_firm = mean(fe_first_rcid, na.rm = TRUE),
-      mean_fe_user = mean(fe_user_id, na.rm = TRUE),
-      mean_fe_city = mean(fe_first_city, na.rm = TRUE),
-      n_obs = n(),
-      .groups = "drop"
-    ) %>%
-    arrange(desc(n_obs))
-  write_csv(firm_summary, file.path(OUT_DIR, paste0("firm_decomposition_summary_", v, ".csv")))
-
-  # ----------------------------
-  # Regression-based decomposition (α)
+  # (1) Regression-Based Decomposition (α)
   # ----------------------------
   cat("[INFO] Running regression-based decomposition (α)...\n")
 
-  city_means <- decomp %>%
-    group_by(first_city) %>%
-    summarise(mean_patents = mean(n_patents, na.rm = TRUE), .groups = "drop") %>%
-    mutate(log_mean_patents = log1p(mean_patents))
+  has_tenure <- all(c("tenure", "tenure_sq") %in% colnames(decomp))
+  if (grepl("covariates", v) && has_tenure) {
+    cat("[INFO] Tenure variables found — including them in α-decomposition.\n")
+    reg_user <- lm(E_user ~ log_E_patents + mean_tenure + mean_tenure_sq, data = agg_city)
+    reg_firm <- lm(E_firm ~ log_E_patents + mean_tenure + mean_tenure_sq, data = agg_city)
+    reg_city <- lm(E_city ~ log_E_patents + mean_tenure + mean_tenure_sq, data = agg_city)
+    reg_year <- lm(E_year ~ log_E_patents + mean_tenure + mean_tenure_sq, data = agg_city)
+  } else {
+    cat("[WARN] Tenure variables not found — running baseline α-decomposition.\n")
+    reg_user <- lm(E_user ~ log_E_patents, data = agg_city)
+    reg_firm <- lm(E_firm ~ log_E_patents, data = agg_city)
+    reg_city <- lm(E_city ~ log_E_patents, data = agg_city)
+    reg_year <- lm(E_year ~ log_E_patents, data = agg_city)
+  }
 
-  city_data <- city_summary %>%
-    left_join(city_means, by = "first_city")
+  alpha_user <- coef(reg_user)["log_E_patents"]
+  alpha_firm <- coef(reg_firm)["log_E_patents"]
+  alpha_city <- coef(reg_city)["log_E_patents"]
+  alpha_year <- coef(reg_year)["log_E_patents"]
 
-  reg_user <- lm(mean_fe_user ~ log_mean_patents, data = city_data)
-  reg_firm <- lm(mean_fe_firm ~ log_mean_patents, data = city_data)
-  reg_city <- lm(mean_fe_city ~ log_mean_patents, data = city_data)
-
-  results <- bind_rows(
-    tidy(reg_user) %>% mutate(component = "Inventor_FE"),
-    tidy(reg_firm) %>% mutate(component = "Firm_FE"),
-    tidy(reg_city) %>% mutate(component = "City_FE")
+  alpha_results <- data.frame(
+    component = c("Inventor_FE", "Firm_FE", "City_FE", "Year_FE"),
+    alpha = c(alpha_user, alpha_firm, alpha_city, alpha_year)
   )
 
-  results_clean <- results %>%
-    filter(term == "log_mean_patents") %>%
-    select(component, estimate, std.error, statistic, p.value) %>%
-    rename(alpha = estimate)
+  # Add tenure components if covariates version AND tenure exists
+  if (grepl("covariates", v) && has_tenure) {
+    alpha_tenure <- mean(coef(reg_user)["mean_tenure"], na.rm = TRUE)
+    alpha_tenure_sq <- mean(coef(reg_user)["mean_tenure_sq"], na.rm = TRUE)
+    alpha_results <- rbind(
+      alpha_results,
+      data.frame(component = "Tenure", alpha = alpha_tenure),
+      data.frame(component = "Tenure_Sq", alpha = alpha_tenure_sq)
+    )
+  }
 
-  alpha_sum <- sum(results_clean$alpha, na.rm = TRUE)
-  results_clean <- results_clean %>% mutate(alpha_norm = alpha / alpha_sum)
+  alpha_results$alpha_sum <- sum(alpha_results$alpha, na.rm = TRUE)
+  alpha_results <- alpha_results %>%
+    mutate(alpha_norm = alpha / alpha_sum)
 
-  write_csv(results_clean, REG_RESULTS)
-  cat("[INFO] Regression-based decomposition saved:", REG_RESULTS, "\n\n")
-  cat("[RESULTS - α Regression Coefficients]\n")
-  print(results_clean)
-  cat("\n--------------------------------------------\n")
+  write_csv(alpha_results, REG_RESULTS)
+  cat("[RESULTS - α Decomposition]\n")
+  print(alpha_results)
+
+  # ----------------------------
+  # (2) Covariate-Based Decomposition (β)
+  # ----------------------------
+  cat("[INFO] Running covariate-based decomposition (β)...\n")
+
+  city_inventors <- decomp %>%
+    group_by(first_city, year) %>%
+    summarise(n_inventors = n_distinct(user_id), .groups = "drop") %>%
+    mutate(X_c = log(n_inventors))
+
+  city_cov_data <- agg_city %>%
+    left_join(city_inventors, by = c("first_city", "year")) %>%
+    mutate(Total_FE = E_user + E_firm + E_city)
+
+  if (grepl("covariates", v) && has_tenure) {
+    cat("[INFO] Tenure variables found — including them in β-decomposition.\n")
+    cov_reg_total <- lm(log_E_patents ~ X_c + mean_tenure + mean_tenure_sq, data = city_cov_data)
+    cov_reg_user  <- lm(E_user ~ X_c + mean_tenure + mean_tenure_sq, data = city_cov_data)
+    cov_reg_firm  <- lm(E_firm ~ X_c + mean_tenure + mean_tenure_sq, data = city_cov_data)
+    cov_reg_city  <- lm(E_city ~ X_c + mean_tenure + mean_tenure_sq, data = city_cov_data)
+  } else {
+    cat("[WARN] Tenure variables not found — running baseline β-decomposition.\n")
+    cov_reg_total <- lm(log_E_patents ~ X_c, data = city_cov_data)
+    cov_reg_user  <- lm(E_user ~ X_c, data = city_cov_data)
+    cov_reg_firm  <- lm(E_firm ~ X_c, data = city_cov_data)
+    cov_reg_city  <- lm(E_city ~ X_c, data = city_cov_data)
+  }
+
+  beta_total <- coef(cov_reg_total)["X_c"]
+  beta_user  <- coef(cov_reg_user)["X_c"]
+  beta_firm  <- coef(cov_reg_firm)["X_c"]
+  beta_city  <- coef(cov_reg_city)["X_c"]
+
+  beta_results <- data.frame(
+    component = c("Total_FE", "Inventor_FE", "Firm_FE", "City_FE"),
+    beta = c(beta_total, beta_user, beta_firm, beta_city)
+  )
+
+  # Add tenure components only if covariates & tenure present
+  if (grepl("covariates", v) && has_tenure) {
+    beta_tenure <- mean(coef(cov_reg_user)["mean_tenure"], na.rm = TRUE)
+    beta_tenure_sq <- mean(coef(cov_reg_user)["mean_tenure_sq"], na.rm = TRUE)
+    beta_results <- rbind(
+      beta_results,
+      data.frame(component = "Tenure", beta = beta_tenure),
+      data.frame(component = "Tenure_Sq", beta = beta_tenure_sq)
+    )
+  }
+
+  beta_results$beta_sum <- sum(beta_results$beta[beta_results$component != "Total_FE"], na.rm = TRUE)
+
+  write_csv(beta_results, COVAR_RESULTS)
+  cat("[RESULTS - β Decomposition]\n")
+  print(beta_results)
+  cat("\n-------------------------------------------------\n")
 
   # ----------------------------
   # Covariance / Correlation of FEs
   # ----------------------------
   cat("[INFO] Computing covariance/correlation of FEs...\n")
-
   fe_data <- decomp %>% select(fe_user_id, fe_first_rcid, fe_first_city) %>% na.omit()
   cov_matrix <- cov(fe_data)
   cor_matrix <- cor(fe_data)
@@ -142,51 +204,7 @@ for (v in versions) {
   write_csv(as.data.frame(cor_matrix),
             file.path(OUT_DIR, paste0("fe_correlation_matrix_", v, ".csv")))
 
-  cat("[INFO] Covariance matrix:\n")
-  print(round(cov_matrix, 4))
-  cat("\n[INFO] Correlation matrix:\n")
-  print(round(cor_matrix, 4))
-  cat("\n[INFO] Saved covariance/correlation matrices for", v, "\n")
-  cat("--------------------------------------------\n")
-
-  # ----------------------------
-  # Covariate-based decomposition (β)
-  # ----------------------------
-  cat("[INFO] Running covariate-based decomposition (β)...\n")
-
-  city_inventors <- decomp %>%
-    group_by(first_city) %>%
-    summarise(n_inventors = n_distinct(user_id), .groups = "drop") %>%
-    mutate(log_inventors = log1p(n_inventors))
-
-  city_cov_data <- city_summary %>%
-    left_join(city_inventors, by = "first_city")
-
-  cov_reg_total <- lm(log1p(mean_fe_city + mean_fe_firm + mean_fe_user) ~ log_inventors,
-                      data = city_cov_data)
-  cov_reg_user  <- lm(mean_fe_user ~ log_inventors, data = city_cov_data)
-  cov_reg_firm  <- lm(mean_fe_firm ~ log_inventors, data = city_cov_data)
-  cov_reg_city  <- lm(mean_fe_city ~ log_inventors, data = city_cov_data)
-
-  cov_results <- bind_rows(
-    tidy(cov_reg_total) %>% mutate(component = "Total_FE"),
-    tidy(cov_reg_user)  %>% mutate(component = "Inventor_FE"),
-    tidy(cov_reg_firm)  %>% mutate(component = "Firm_FE"),
-    tidy(cov_reg_city)  %>% mutate(component = "City_FE")
-  )
-
-  cov_results_clean <- cov_results %>%
-    filter(term == "log_inventors") %>%
-    select(component, estimate, std.error, statistic, p.value) %>%
-    rename(beta = estimate)
-
-  write_csv(cov_results_clean, COVAR_RESULTS)
-  cat("[INFO] Covariate-based decomposition saved:", COVAR_RESULTS, "\n\n")
-  cat("[RESULTS - β Regression Coefficients]\n")
-  print(cov_results_clean)
-  cat("\n============================================\n")
-  cat("[INFO] ✅ Completed decomposition for:", v, "\n")
-  cat("============================================\n")
+  cat("[INFO] Covariance and correlation saved for", v, "\n")
 }
-
 cat("\n[INFO] All decompositions completed successfully.\n")
+

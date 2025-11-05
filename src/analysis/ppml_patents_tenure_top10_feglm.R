@@ -140,7 +140,7 @@ sink()
 cat("[INFO] Summary saved to:", SUMMARY_FILE, "\n")
 
 # ============================
-# Save Fixed Effects (optional, same as before)
+# Save Fixed Effects
 # ============================
 cat("[INFO] Extracting fixed effects...\n")
 
@@ -156,12 +156,49 @@ for (fe_name in names(fe_list)) {
 }
 
 # ============================
-# Save Decomposition File
+# Merge fixed effects and predicted values into decomposition dataset
 # ============================
-df_base <- open_dataset(INPUT, format = "parquet") %>%
-  select(user_id, first_rcid, first_city, year, n_patents) %>%
-  collect()
+cat("[INFO] Merging fixed effects and predicted values into decomposition dataset...\n")
 
+y_hat <- predict(ppml_top10, type = "response")
+n_pred <- length(y_hat)
+n_obs  <- nrow(df)
+cat("[DEBUG] Predictions generated:", n_pred, "for", n_obs, "observations in df\n")
+
+# Retrieve the actual estimation sample from alpaca object
+if (!is.null(ppml_top10$model)) {
+  df_est <- ppml_top10$model
+} else if (!is.null(ppml_top10$data)) {
+  df_est <- ppml_top10$data
+} else {
+  stop("[ERROR] Cannot locate estimation sample inside Alpaca object.")
+}
+
+n_est <- nrow(df_est)
+cat("[DEBUG] Estimation sample rows:", n_est, "\n")
+
+if (n_pred != n_est) {
+  stop("[ERROR] Prediction vector length does not match estimation sample — something is inconsistent.")
+}
+
+# Attach predictions to the estimation sample
+df_est$y_hat <- y_hat
+
+# Merge predictions back to full dataset
+df <- df %>%
+  left_join(
+    df_est %>% select(user_id, first_rcid, first_city, year, y_hat),
+    by = c("user_id", "first_rcid", "first_city", "year")
+  )
+
+cat("[INFO] Merged predictions back into full dataset.\n")
+cat("[DEBUG] Non-missing y_hat:", sum(!is.na(df$y_hat)), "of", nrow(df), "\n")
+
+# Step 2: Keep the relevant subset
+df_base <- df %>%
+  select(user_id, first_rcid, first_city, year, n_patents, y_hat)
+
+# Step 3: Read and merge fixed effects
 read_fe <- function(name, key) {
   path <- file.path(FE_DIR, paste0("fe_", name, ".csv"))
   if (file.exists(path)) {
@@ -175,6 +212,7 @@ fe_rcid  <- read_fe("first_rcid", "first_rcid")
 fe_city  <- read_fe("first_city", "first_city")
 fe_year  <- read_fe("year", "year")
 
+# Step 4: Harmonize variable types for joining
 df_base <- df_base %>%
   mutate(
     user_id = as.character(user_id),
@@ -188,15 +226,17 @@ if (!is.null(fe_rcid)) fe_rcid <- fe_rcid %>% mutate(first_rcid = as.character(f
 if (!is.null(fe_city)) fe_city <- fe_city %>% mutate(first_city = as.character(first_city))
 if (!is.null(fe_year)) fe_year <- fe_year %>% mutate(year = as.character(year))
 
+# Step 5: Merge all fixed effects and predictions
 decomp <- df_base
 if (!is.null(fe_user))  decomp <- decomp %>% left_join(fe_user,  by = "user_id")
 if (!is.null(fe_rcid))  decomp <- decomp %>% left_join(fe_rcid,  by = "first_rcid")
 if (!is.null(fe_city))  decomp <- decomp %>% left_join(fe_city,  by = "first_city")
 if (!is.null(fe_year))  decomp <- decomp %>% left_join(fe_year,  by = "year")
 
+# Step 6: Save the unified decomposition file (includes y_hat)
 out_decomp <- file.path(OUT_DIR, "decomposition_joined_covariates_feglm_top10.csv")
 write_csv(decomp, out_decomp)
-cat("[INFO] Decomposition file saved to:", out_decomp, "\n")
+cat("[INFO] Decomposition dataset (with y_hat) saved to:", out_decomp, "\n")
 
 # ============================
 # Runtime summary
