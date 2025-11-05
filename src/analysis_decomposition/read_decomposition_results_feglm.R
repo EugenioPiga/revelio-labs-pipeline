@@ -62,7 +62,7 @@ for (v in versions) {
   # ----------------------------
   # Focus on one specific year
   # ----------------------------
-  target_year <- "2010"
+  target_year <- "2018"
   if ("year" %in% colnames(decomp)) {
     decomp <- decomp %>% filter(year == target_year)
     cat("[INFO] Filtering decomposition to year =", target_year, "\n")
