@@ -74,14 +74,14 @@ for (v in versions) {
   # ----------------------------
   cat("[INFO] Aggregating to city-year level...\n")
   agg_city <- decomp %>%
-    group_by(first_metro_area, year) %>%
+    group_by(first_state, year) %>%
     summarise(
       mean_patents = mean(n_patents, na.rm = TRUE),
       mean_patents_nonzero = mean(n_patents[n_patents > 0], na.rm = TRUE),
       num_inventors = n_distinct(user_id),
       E_user = mean(fe_user_id, na.rm = TRUE),
       E_firm = mean(fe_first_rcid, na.rm = TRUE),
-      E_city = mean(fe_first_metro_area, na.rm = TRUE),
+      E_city = mean(fe_first_state, na.rm = TRUE),
       E_year = mean(fe_year, na.rm = TRUE),
       mean_tenure = if ("tenure" %in% names(.)) mean(tenure, na.rm = TRUE) else NA,
       mean_tenure_sq = if ("tenure_sq" %in% names(.)) mean(tenure_sq, na.rm = TRUE) else NA,
@@ -93,8 +93,8 @@ for (v in versions) {
   # sanity check: correlation between num_inventors and mean_patents
   inventors_patents_plot <- ggplot(
     agg_city,
-    aes(x = log(num_inventors), y = log(mean_patents), label = first_metro_area),
-    #aes(x = log(num_inventors), y = log(mean_patents_nonzero), label = first_metro_area)
+    aes(x = log(num_inventors), y = log(mean_patents), label = first_state),
+    #aes(x = log(num_inventors), y = log(mean_patents_nonzero), label = first_state)
   ) +
     geom_point(aes(size = num_inventors), alpha = 0.6) +
     ggrepel::geom_text_repel(size = 3, max.overlaps = Inf) +
@@ -113,27 +113,27 @@ for (v in versions) {
     height = 6
   )
 
-#  # sanity check: correlation between num_inventors and city FE
-#   inventors_city_plot <- ggplot(
-#     agg_city,
-#     aes(x = log(num_inventors), y = E_city, label = first_metro_area)
-#   ) +
-#     geom_point(aes(size = num_inventors), alpha = 0.6) +
-#     ggrepel::geom_text_repel(size = 3, max.overlaps = Inf) +
-#     labs(
-#       title = "Inventors vs. City FE",
-#       x = "log(Number of inventors)",
-#       y = "City fixed effect (E_city)",
-#       size = "Number of inventors"
-#     ) +
-#     scale_size_continuous(range = c(2, 8)) +
-#     theme_minimal()
-#   ggsave(
-#     file.path(OUT_FIG, paste0("inventors_vs_city_fe_", v, ".png")),
-#     inventors_city_plot,
-#     width = 8,
-#     height = 6
-#   )
+ # sanity check: correlation between num_inventors and city FE
+  inventors_city_plot <- ggplot(
+    agg_city %>% filter(abs(E_city) < 10),
+    aes(x = log(num_inventors), y = E_city, label = first_state)
+  ) +
+    geom_point(aes(size = num_inventors), alpha = 0.6) +
+    ggrepel::geom_text_repel(size = 3, max.overlaps = Inf) +
+    labs(
+      title = "Inventors vs. City FE",
+      x = "log(Number of inventors)",
+      y = "City fixed effect (E_city)",
+      size = "Number of inventors"
+    ) +
+    scale_size_continuous(range = c(2, 8)) +
+    theme_minimal()
+  ggsave(
+    file.path(OUT_FIG, paste0("inventors_vs_city_fe_", v, ".png")),
+    inventors_city_plot,
+    width = 8,
+    height = 6
+  )
 
   # ----------------------------
   # (1) Regression-Based Decomposition (α)
@@ -143,16 +143,16 @@ for (v in versions) {
   has_tenure <- all(c("tenure", "tenure_sq") %in% colnames(decomp))
   if (grepl("covariates", v) && has_tenure) {
     cat("[INFO] Tenure variables found — including them in α-decomposition.\n")
-    reg_user <- lm(E_user ~ log_E_patents + mean_tenure + mean_tenure_sq, data = agg_city)
-    reg_firm <- lm(E_firm ~ log_E_patents + mean_tenure + mean_tenure_sq, data = agg_city)
-    reg_city <- lm(E_city ~ log_E_patents + mean_tenure + mean_tenure_sq, data = agg_city)
-    reg_year <- lm(E_year ~ log_E_patents + mean_tenure + mean_tenure_sq, data = agg_city)
+    reg_user <- lm(E_user ~ log_E_patents + mean_tenure + mean_tenure_sq, data = agg_city, weights = num_inventors)
+    reg_firm <- lm(E_firm ~ log_E_patents + mean_tenure + mean_tenure_sq, data = agg_city, weights = num_inventors)
+    reg_city <- lm(E_city ~ log_E_patents + mean_tenure + mean_tenure_sq, data = agg_city, weights = num_inventors)
+    reg_year <- lm(E_year ~ log_E_patents + mean_tenure + mean_tenure_sq, data = agg_city, weights = num_inventors)
   } else {
     cat("[WARN] Tenure variables not found — running baseline α-decomposition.\n")
-    reg_user <- lm(E_user ~ log_E_patents, data = agg_city)
-    reg_firm <- lm(E_firm ~ log_E_patents, data = agg_city)
-    reg_city <- lm(E_city ~ log_E_patents, data = agg_city)
-    reg_year <- lm(E_year ~ log_E_patents, data = agg_city)
+    reg_user <- lm(E_user ~ log_E_patents, data = agg_city, weights = num_inventors)
+    reg_firm <- lm(E_firm ~ log_E_patents, data = agg_city, weights = num_inventors)
+    reg_city <- lm(E_city ~ log_E_patents, data = agg_city, weights = num_inventors)
+    reg_year <- lm(E_year ~ log_E_patents, data = agg_city, weights = num_inventors)
   }
 
   alpha_user <- coef(reg_user)["log_E_patents"]
@@ -190,26 +190,26 @@ for (v in versions) {
   cat("[INFO] Running covariate-based decomposition (β)...\n")
 
   city_inventors <- decomp %>%
-    group_by(first_metro_area, year) %>%
-    summarise(n_inventors = n_distinct(user_id), .groups = "drop") %>%
+    group_by(first_state, year) %>%
+    summarise(num_inventors = n_distinct(user_id), .groups = "drop") %>%
     mutate(X_c = log(n_inventors))
 
   city_cov_data <- agg_city %>%
-    left_join(city_inventors, by = c("first_metro_area", "year")) %>%
+    left_join(city_inventors, by = c("first_state", "year")) %>%
     mutate(Total_FE = E_user + E_firm + E_city)
 
   if (grepl("covariates", v) && has_tenure) {
     cat("[INFO] Tenure variables found — including them in β-decomposition.\n")
-    cov_reg_total <- lm(log_E_patents ~ X_c + mean_tenure + mean_tenure_sq, data = city_cov_data)
-    cov_reg_user  <- lm(E_user ~ X_c + mean_tenure + mean_tenure_sq, data = city_cov_data)
-    cov_reg_firm  <- lm(E_firm ~ X_c + mean_tenure + mean_tenure_sq, data = city_cov_data)
-    cov_reg_city  <- lm(E_city ~ X_c + mean_tenure + mean_tenure_sq, data = city_cov_data)
+    cov_reg_total <- lm(log_E_patents ~ X_c + mean_tenure + mean_tenure_sq, data = city_cov_data, weight = num_inventors)
+    cov_reg_user  <- lm(E_user ~ X_c + mean_tenure + mean_tenure_sq, data = city_cov_data, weight = num_inventors)
+    cov_reg_firm  <- lm(E_firm ~ X_c + mean_tenure + mean_tenure_sq, data = city_cov_data, weight = num_inventors)
+    cov_reg_city  <- lm(E_city ~ X_c + mean_tenure + mean_tenure_sq, data = city_cov_data, weight = num_inventors)
   } else {
     cat("[WARN] Tenure variables not found — running baseline β-decomposition.\n")
-    cov_reg_total <- lm(log_E_patents ~ X_c, data = city_cov_data)
-    cov_reg_user  <- lm(E_user ~ X_c, data = city_cov_data)
-    cov_reg_firm  <- lm(E_firm ~ X_c, data = city_cov_data)
-    cov_reg_city  <- lm(E_city ~ X_c, data = city_cov_data)
+    cov_reg_total <- lm(log_E_patents ~ X_c, data = city_cov_data, weight = num_inventors)
+    cov_reg_user  <- lm(E_user ~ X_c, data = city_cov_data, weight = num_inventors)
+    cov_reg_firm  <- lm(E_firm ~ X_c, data = city_cov_data, weight = num_inventors)
+    cov_reg_city  <- lm(E_city ~ X_c, data = city_cov_data, weight = num_inventors)
   }
 
   beta_total <- coef(cov_reg_total)["X_c"]
@@ -244,7 +244,7 @@ for (v in versions) {
   # Covariance / Correlation of FEs
   # ----------------------------
   cat("[INFO] Computing covariance/correlation of FEs...\n")
-  fe_data <- decomp %>% select(fe_user_id, fe_first_rcid, fe_first_metro_area) %>% na.omit()
+  fe_data <- decomp %>% select(fe_user_id, fe_first_rcid, fe_first_state) %>% na.omit()
   cov_matrix <- cov(fe_data)
   cor_matrix <- cor(fe_data)
 
