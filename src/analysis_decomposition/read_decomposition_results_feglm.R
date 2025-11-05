@@ -113,6 +113,28 @@ for (v in versions) {
     height = 6
   )
 
+#  # sanity check: correlation between num_inventors and city FE
+#   inventors_city_plot <- ggplot(
+#     agg_city,
+#     aes(x = log(num_inventors), y = E_city, label = first_city)
+#   ) +
+#     geom_point(aes(size = num_inventors), alpha = 0.6) +
+#     ggrepel::geom_text_repel(size = 3, max.overlaps = Inf) +
+#     labs(
+#       title = "Inventors vs. City FE",
+#       x = "log(Number of inventors)",
+#       y = "City fixed effect (E_city)",
+#       size = "Number of inventors"
+#     ) +
+#     scale_size_continuous(range = c(2, 8)) +
+#     theme_minimal()
+#   ggsave(
+#     file.path(OUT_FIG, paste0("inventors_vs_city_fe_", v, ".png")),
+#     inventors_city_plot,
+#     width = 8,
+#     height = 6
+#   )
+
   # ----------------------------
   # (1) Regression-Based Decomposition (α)
   # ----------------------------
