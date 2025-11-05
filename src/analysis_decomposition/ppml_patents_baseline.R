@@ -33,7 +33,8 @@ cat("[DEBUG] fixest loaded:", "fixest" %in% loadedNamespaces(), "\n")
 # Config
 # ============================
 INPUT <- "/labs/khanna/linkedin_202507/processed/inventor_year_merged"
-OUT_DIR <- "/home/epiga/revelio_labs/output/regressions"
+#OUT_DIR <- "/home/epiga/revelio_labs/output/regressions"
+OUT_DIR <- "/home/gps-yuhei/revelio_labs/output/regressions"
 BASE_FILE <- file.path(OUT_DIR, "ppml_baseline_fepois.rds")
 SUMMARY_FILE <- file.path(OUT_DIR, "ppml_baseline_fepois_summary.txt")
 
@@ -46,7 +47,7 @@ cat("[INFO] Reading parquet file...\n")
 global_start <- Sys.time()
 
 df <- open_dataset(INPUT, format = "parquet") %>%
-  select(user_id, n_patents, first_rcid, first_city, year) %>%
+  select(user_id, n_patents, first_rcid, first_city, first_country, year) %>%
   collect()
 
 cat("[INFO] Data loaded:", nrow(df), "rows\n")
@@ -58,6 +59,24 @@ df <- df %>%
   filter(!is.na(n_patents), !is.na(user_id), year >= 1990)
 
 cat("[INFO] Filtered sample (year >= 1990). Rows remaining:", nrow(df), "\n")
+
+# only keep US cities
+df <- df %>%
+  filter(first_country == "United States")
+
+# keep random 1% of user_id
+set.seed(12345)
+unique_users <- unique(df$user_id)
+sampled_users <- sample(unique_users, size = ceiling(0.01 * length(unique_users)))
+df <- df %>%
+  filter(user_id %in% sampled_users)
+
+table(df$year)
+
+# print out number of unique cities
+cat("[INFO] Number of unique first_city after filtering:", length(unique(df$first_city)), "\n")
+
+
 
 # ============================
 # Baseline PPML (fixest::fepois)
@@ -127,9 +146,12 @@ for (fe_name in names(fe_list)) {
 # ============================
 cat("[INFO] Merging fixed effects into a single decomposition dataset...\n")
 
-df_base <- open_dataset(INPUT, format = "parquet") %>%
-  select(user_id, first_rcid, first_city, year, n_patents) %>%
-  collect()
+# df_base <- open_dataset(INPUT, format = "parquet") %>%
+#   select(user_id, first_rcid, first_city, year, n_patents) %>%
+#   collect()
+
+# use the same selected sample
+df_base <- df
 
 read_fe <- function(name, key) {
   path <- file.path(FE_DIR, paste0("fe_", name, ".csv"))

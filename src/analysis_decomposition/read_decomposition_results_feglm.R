@@ -13,7 +13,7 @@ user_lib <- "~/R/library"
 if (!dir.exists(user_lib)) dir.create(user_lib, recursive = TRUE)
 .libPaths(c(user_lib, .libPaths()))
 
-pkgs <- c("readr", "dplyr", "broom")
+pkgs <- c("readr", "dplyr", "broom", "ggplot2", "ggrepel")
 for (p in pkgs)
   if (!requireNamespace(p, quietly = TRUE))
     install.packages(p, repos = "https://cloud.r-project.org", lib = user_lib)
@@ -22,7 +22,9 @@ invisible(lapply(pkgs, library, character.only = TRUE))
 # ----------------------------
 # Config: list of decomposition files
 # ----------------------------
-OUT_DIR <- "/home/epiga/revelio_labs/output/regressions"
+#OUT_DIR <- "/home/epiga/revelio_labs/output/regressions"
+OUT_DIR <- "/home/gps-yuhei/revelio_labs/output/regressions"
+OUT_FIG <- "/home/gps-yuhei/code/revelio-labs-pipeline/output/figures/decomposition"
 
 versions <- c(
   "baseline_feglm",
@@ -75,6 +77,7 @@ for (v in versions) {
     group_by(first_city, year) %>%
     summarise(
       mean_patents = mean(n_patents, na.rm = TRUE),
+      num_inventors = n_distinct(user_id),
       E_user = mean(fe_user_id, na.rm = TRUE),
       E_firm = mean(fe_first_rcid, na.rm = TRUE),
       E_city = mean(fe_first_city, na.rm = TRUE),
@@ -85,6 +88,26 @@ for (v in versions) {
     ) %>%
     filter(mean_patents > 0) %>%
     mutate(log_E_patents = log(mean_patents))
+
+  # sanity check: correlation between num_inventors and mean_patents
+  inventors_patents_plot <- ggplot(
+    agg_city,
+    aes(x = log(num_inventors), y = log(mean_patents), label = first_city)
+  ) +
+    geom_point(alpha = 0.6) +
+    ggrepel::geom_text_repel(size = 3, max.overlaps = Inf) +
+    labs(
+      title = "Inventors vs. Patents",
+      x = "log(Number of inventors)",
+      y = "log(Mean patents)"
+    ) +
+    theme_minimal()
+  ggsave(
+    file.path(OUT_FIG, paste0("inventors_vs_patents_", v, ".png")),
+    inventors_patents_plot,
+    width = 8,
+    height = 6
+  )
 
   # ----------------------------
   # (1) Regression-Based Decomposition (α)
@@ -207,4 +230,3 @@ for (v in versions) {
   cat("[INFO] Covariance and correlation saved for", v, "\n")
 }
 cat("\n[INFO] All decompositions completed successfully.\n")
-
