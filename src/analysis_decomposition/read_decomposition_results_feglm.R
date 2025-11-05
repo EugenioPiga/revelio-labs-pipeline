@@ -77,6 +77,7 @@ for (v in versions) {
     group_by(first_city, year) %>%
     summarise(
       mean_patents = mean(n_patents, na.rm = TRUE),
+      mean_patents_nonzero = mean(n_patents[n_patents > 0], na.rm = TRUE),
       num_inventors = n_distinct(user_id),
       E_user = mean(fe_user_id, na.rm = TRUE),
       E_firm = mean(fe_first_rcid, na.rm = TRUE),
@@ -92,15 +93,18 @@ for (v in versions) {
   # sanity check: correlation between num_inventors and mean_patents
   inventors_patents_plot <- ggplot(
     agg_city,
-    aes(x = log(num_inventors), y = log(mean_patents), label = first_city)
+    aes(x = log(num_inventors), y = log(mean_patents), label = first_city),
+    #aes(x = log(num_inventors), y = log(mean_patents_nonzero), label = first_city)
   ) +
-    geom_point(alpha = 0.6) +
+    geom_point(aes(size = num_inventors), alpha = 0.6) +
     ggrepel::geom_text_repel(size = 3, max.overlaps = Inf) +
     labs(
       title = "Inventors vs. Patents",
       x = "log(Number of inventors)",
-      y = "log(Mean patents)"
+      y = "log(Mean patents)",
+      size = "Number of inventors"
     ) +
+    scale_size_continuous(range = c(2, 8)) +
     theme_minimal()
   ggsave(
     file.path(OUT_FIG, paste0("inventors_vs_patents_", v, ".png")),

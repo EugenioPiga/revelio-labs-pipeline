@@ -60,14 +60,37 @@ df <- df %>%
 
 cat("[INFO] Filtered sample (year >= 1990). Rows remaining:", nrow(df), "\n")
 
+# ============================
+# Restrict to top 10% inventors by lifetime patenting
+# ============================
+cat("[INFO] Computing total lifetime patents per inventor...\n")
+
+inventor_totals <- df %>%
+  group_by(user_id) %>%
+  summarise(total_patents = sum(n_patents, na.rm = TRUE), .groups = "drop")
+
+p90_cutoff <- quantile(inventor_totals$total_patents, 0.90, na.rm = TRUE)
+cat("[INFO] 90th percentile patent threshold:", round(p90_cutoff, 2), "\n")
+
+top_inventors <- inventor_totals %>%
+  filter(total_patents >= p90_cutoff) %>%
+  select(user_id)
+
+df <- df %>% semi_join(top_inventors, by = "user_id")
+cat("[INFO] Filtered to top 10% inventors. Remaining rows:", nrow(df), "\n")
+
+# ============================
+# Other filtering
+# ============================
+
 # only keep US cities
 df <- df %>%
   filter(first_country == "United States")
 
-# keep random 1% of user_id
+# keep random 10% of user_id
 set.seed(12345)
 unique_users <- unique(df$user_id)
-sampled_users <- sample(unique_users, size = ceiling(0.01 * length(unique_users)))
+sampled_users <- sample(unique_users, size = ceiling(0.1 * length(unique_users)))
 df <- df %>%
   filter(user_id %in% sampled_users)
 
