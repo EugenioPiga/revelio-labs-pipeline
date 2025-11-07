@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=ppml_top10_feglm
-#SBATCH --output=/home/epiga/revelio_labs/logs/ppml_top10_feglm_%j.out
-#SBATCH --error=/home/epiga/revelio_labs/logs/ppml_top10_feglm_%j.err
+#SBATCH --job-name=ppml_tenure_top10_feglm
+#SBATCH --output=/home/epiga/revelio_labs/logs/ppml_tenure_top10_feglm_%j.out
+#SBATCH --error=/home/epiga/revelio_labs/logs/ppml_tenure_top10_feglm_%j.err
 #SBATCH --time=24:00:00
 #SBATCH --mem=500G
 #SBATCH --cpus-per-task=16
@@ -38,8 +38,8 @@ status_top10=$?
 if [ $status_top10 -ne 0 ]; then
     echo "[ERROR] PPML Top10 model failed with exit code $status_top10."
     echo "[ERROR] Check logs at:"
-    echo "        $LOG_DIR/ppml_top10_feglm_${SLURM_JOB_ID}.out"
-    echo "        $LOG_DIR/ppml_top10_feglm_${SLURM_JOB_ID}.err"
+    echo "        $LOG_DIR/ppml_tenure_top10_feglm_${SLURM_JOB_ID}.out"
+    echo "        $LOG_DIR/ppml_tenure_top10_feglm_${SLURM_JOB_ID}.err"
     echo "[FATAL] Job failed. Exiting..."
     exit 1
 else

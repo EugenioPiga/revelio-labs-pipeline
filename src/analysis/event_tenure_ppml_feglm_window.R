@@ -68,8 +68,8 @@ make_market_key <- function(dt, mover_type) {
   switch(
     mover_type,
     "firm" = dt[, mkt := as.character(first_rcid)],
-    "city" = dt[, mkt := as.character(first_city)],
-    "firm_within_city" = dt[, mkt := paste0(first_rcid, "||", first_city)],
+    "state" = dt[, mkt := as.character(first_state)],
+    "firm_within_state" = dt[, mkt := paste0(first_rcid, "||", first_state)],
     stop("Unknown mover_type")
   )
   dt[, mkt := as.character(mkt)]
@@ -191,7 +191,35 @@ df <- ds %>% dplyr::filter(year >= !!year_min) %>% collect()
 setDT(df)
 cat("[INFO] Rows after year filter:", nrow(df), "\n")
 df[, n_patents := fifelse(is.na(n_patents), 0, n_patents)]
-df[, first_city := na_if(first_city, "empty")]
+df[, first_state := na_if(first_state, "empty")]
+
+# ============================
+# Restrict to top 10% inventors by lifetime patenting
+# ============================
+cat("[INFO] Computing total lifetime patents per inventor...\n")
+
+inventor_totals <- df %>%
+  group_by(user_id) %>%
+  summarise(total_patents = sum(n_patents, na.rm = TRUE), .groups = "drop")
+
+p90_cutoff <- quantile(inventor_totals$total_patents, 0.90, na.rm = TRUE)
+cat("[INFO] 90th percentile patent threshold:", round(p90_cutoff, 2), "\n")
+
+top_inventors <- inventor_totals %>%
+  filter(total_patents >= p90_cutoff) %>%
+  select(user_id)
+
+df <- df %>% semi_join(top_inventors, by = "user_id")
+cat("[INFO] Filtered to top 10% inventors. Remaining rows:", nrow(df), "\n")
+
+# ============================
+# Other filtering
+# ============================
+
+# only keep US cities
+df <- df %>%
+  filter(first_country == "United States")
+cat("[INFO] Filtered to top 10% U.S. inventors. Remaining rows:", nrow(df), "\n")
 
 # =========================
 # Construct Tenure Controls
@@ -209,21 +237,21 @@ cat("[INFO] Tenure controls created. Rows remaining:", nrow(df), "\n")
 # =========================
 # Subset Markets
 # =========================
-df_city   <- df[!is.na(first_city)]
+df_state   <- df[!is.na(first_state)]
 df_firm   <- df[!is.na(first_rcid)]
-df_fwcity <- df[!is.na(first_rcid) & !is.na(first_city)]
-cat("[INFO] Subsets -> City:", nrow(df_city),
+df_fwstate <- df[!is.na(first_rcid) & !is.na(first_state)]
+cat("[INFO] Subsets -> state:", nrow(df_state),
     "| Firm:", nrow(df_firm),
-    "| Firm-within-city:", nrow(df_fwcity), "\n")
+    "| Firm-within-state:", nrow(df_fwstate), "\n")
 
 # =========================
 # Run Each Event Study
 # =========================
-for (mover_type in c("city","firm","firm_within_city")) {
+for (mover_type in c("state","firm","firm_within_state")) {
   dt <- switch(mover_type,
-               "city" = copy(df_city),
+               "state" = copy(df_state),
                "firm" = copy(df_firm),
-               "firm_within_city" = copy(df_fwcity))
+               "firm_within_state" = copy(df_fwstate))
   dt <- make_market_key(dt, mover_type)
   dt <- tag_first_move(dt)
   dt <- prep_event_time(dt)
