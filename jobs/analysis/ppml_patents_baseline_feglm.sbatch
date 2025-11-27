@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=ppml_feglm_baseline
-#SBATCH --output=/home/epiga/revelio_labs/logs/ppml_feglm_%j.out
-#SBATCH --error=/home/epiga/revelio_labs/logs/ppml_feglm_%j.err
+#SBATCH --job-name=ppml_baseline_feglm
+#SBATCH --output=/home/epiga/revelio_labs/logs/ppml_baseline_feglm_%j.out
+#SBATCH --error=/home/epiga/revelio_labs/logs/ppml_baseline_feglm_%j.err
 #SBATCH --time=24:00:00
 #SBATCH --mem=500G
 #SBATCH --cpus-per-task=16
@@ -39,8 +39,8 @@ status_base=$?
 if [ $status_base -ne 0 ]; then
     echo "[ERROR] Baseline PPML model failed with exit code $status_base."
     echo "[ERROR] Check logs at:"
-    echo "        $LOG_DIR/ppml_feglm_${SLURM_JOB_ID}.out"
-    echo "        $LOG_DIR/ppml_feglm_${SLURM_JOB_ID}.err"
+    echo "        $LOG_DIR/ppml_baseline_feglm_${SLURM_JOB_ID}.out"
+    echo "        $LOG_DIR/ppml_baseline_feglm_${SLURM_JOB_ID}.err"
     echo "[FATAL] Job failed. Exiting..."
     exit 1
 else

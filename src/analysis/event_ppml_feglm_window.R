@@ -68,9 +68,11 @@ cat("=========================================\n\n")
 make_market_key <- function(dt, mover_type) {
   switch(
     mover_type,
-    "firm" = dt[, mkt := as.character(first_rcid)],
-    "city" = dt[, mkt := as.character(first_city)],
-    "firm_within_city" = dt[, mkt := paste0(first_rcid, "||", first_city)],
+    "firm"  = dt[, mkt := as.character(first_rcid)],
+    "state" = dt[, mkt := as.character(first_state)],
+    "metro" = dt[, mkt := as.character(first_metro_area)],
+    "firm_within_state" = dt[, mkt := paste0(first_rcid, "||", first_state)],
+    "firm_within_metro" = dt[, mkt := paste0(first_rcid, "||", first_metro_area)],  # <-- NEW
     stop("Unknown mover_type")
   )
   dt[, mkt := as.character(mkt)]
@@ -209,19 +211,54 @@ run_window <- function(min_pre, min_post, suffix) {
   cat("[INFO] Loading dataset...\n")
   ds <- arrow::open_dataset(INPUT_DIR, format="parquet")
   df <- ds %>% dplyr::filter(year >= !!year_min) %>% collect()
+  
+  # ============================
+  # Filter to U.S. Inventors
+  # ============================
+  df <- df %>%
+    filter(first_country == "United States")
+
+  cat("[INFO] Kept only U.S. inventors:", nrow(df), "rows\n")
+
+  # ============================
+  # Restrict to top 10% inventors by lifetime patents (U.S.-only)
+  # ============================
+  cat("[INFO] Computing lifetime patents (U.S.-only) and 90th percentile cutoff...\n")
+
+  inventor_totals <- df %>%
+    group_by(user_id) %>%
+    summarise(total_patents = sum(n_patents, na.rm = TRUE), .groups = "drop")
+
+  p90_cutoff <- quantile(inventor_totals$total_patents, 0.90, na.rm = TRUE)
+  cat("[INFO] U.S. 90th percentile patent threshold:", round(p90_cutoff, 2), "\n")
+
+  top_inventors <- inventor_totals %>%
+    filter(total_patents >= p90_cutoff) %>%
+    select(user_id)
+
+  df <- df %>% semi_join(top_inventors, by = "user_id")
+
+  cat("[INFO] Filtered to top 10% U.S. inventors. Remaining rows:", nrow(df), "\n")
+
   setDT(df)
   df[, n_patents := fifelse(is.na(n_patents), 0, n_patents)]
-  df[, first_city := na_if(first_city, "empty")]
-
-  df_city   <- df[!is.na(first_city)]
+  df[, first_state := na_if(first_state, "empty")]
+  df[, first_metro_area  := na_if(first_metro_area, "empty")]
+  
+  df_state   <- df[!is.na(first_state)]
+  df_metro   <- df[!is.na(first_metro_area)]  
   df_firm   <- df[!is.na(first_rcid)]
-  df_fwcity <- df[!is.na(first_rcid) & !is.na(first_city)]
+  df_fwstate <- df[!is.na(first_rcid) & !is.na(first_state)]
+  df_fwmetro <- df[!is.na(first_rcid) & !is.na(first_metro_area)]
 
-  for (mover_type in c("city","firm","firm_within_city")) {
+  for (mover_type in c("state","metro","firm","firm_within_state","firm_within_metro")) {
     dt <- switch(mover_type,
-                 "city" = copy(df_city),
+                 "state" = copy(df_state),
+                 "metro" = copy(df_metro),
                  "firm" = copy(df_firm),
-                 "firm_within_city" = copy(df_fwcity))
+                 "firm_within_state" = copy(df_fwstate),
+                 "firm_within_metro" = copy(df_fwmetro) 
+                  )
     dt <- make_market_key(dt, mover_type)
     dt <- tag_first_move(dt)
     dt <- prep_event_time(dt)

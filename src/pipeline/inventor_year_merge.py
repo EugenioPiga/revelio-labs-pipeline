@@ -224,6 +224,7 @@ check_dupes(pos_year_full, "After POS forward-fill expansion")
 # 4. Education attributes (invariant)
 # -----------------------------
 print("[INFO] Extracting education (first/last overall)...")
+
 edu_first = (
     pos.filter(col("startdate_edu").isNotNull())
        .orderBy("startdate_edu")
@@ -232,10 +233,12 @@ edu_first = (
            first("university_name", ignorenulls=True).alias("first_university"),
            first("degree", ignorenulls=True).alias("first_degree"),
            first("field", ignorenulls=True).alias("first_field"),
+           first("university_country", ignorenulls=True).alias("first_university_country"),
            first("startdate_edu", ignorenulls=True).alias("first_startdate_edu"),
            first("enddate_edu", ignorenulls=True).alias("first_enddate_edu")
        )
 )
+
 edu_last = (
     pos.filter(col("enddate_edu").isNotNull())
        .orderBy(F.desc("enddate_edu"))
@@ -244,6 +247,7 @@ edu_last = (
            first("university_name", ignorenulls=True).alias("last_university"),
            first("degree", ignorenulls=True).alias("last_degree"),
            first("field", ignorenulls=True).alias("last_field"),
+           first("university_country", ignorenulls=True).alias("last_university_country"),
            first("startdate_edu", ignorenulls=True).alias("last_startdate_edu"),
            first("enddate_edu", ignorenulls=True).alias("last_enddate_edu")
        )
@@ -260,9 +264,7 @@ first_pos = (
        .agg(F.min("startdate").alias("first_startdate_pos"))
 )
 
-
 check_dupes(first_pos, "First Position")
-
 
 # -----------------------------
 # 5. Merge and prepare for write

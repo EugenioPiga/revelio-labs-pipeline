@@ -55,8 +55,12 @@ cat("[INFO] Reading parquet file...\n")
 global_start <- Sys.time()
 
 df <- open_dataset(INPUT, format = "parquet") %>%
-  select(user_id, n_patents, first_rcid, first_city, year) %>%
+  select(user_id, n_patents, first_rcid, first_state, year, first_country, first_state) %>%
   collect()
+
+# only keep US cities
+df <- df %>%
+  filter(first_country == "United States")
 
 cat("[INFO] Data loaded:", nrow(df), "rows\n")
 
@@ -90,7 +94,7 @@ gc()
 flush.console()
 
 ppml_top10 <- alpaca::feglm(
-  formula = n_patents ~ 1 | user_id + first_rcid + first_city + year,
+  formula = n_patents ~ 1 | user_id + first_rcid + first_state + year,
   data = df_top10,
   family = poisson(link = "log"),
   control = alpaca::feglmControl(
@@ -165,19 +169,38 @@ if (n_pred != n_est) {
 # Attach predictions to the estimation sample
 df_est$y_hat <- y_hat
 
+# Harmonize join key types before merging (fix for factor/integer mismatch)
+cat("[INFO] Harmonizing key variable types before merging predictions...\n")
+
+df_top10 <- df_top10 %>%
+  mutate(
+    user_id = as.character(user_id),
+    first_rcid = as.character(first_rcid),
+    first_state = as.character(first_state),
+    year = as.character(year)
+  )
+
+df_est <- df_est %>%
+  mutate(
+    user_id = as.character(user_id),
+    first_rcid = as.character(first_rcid),
+    first_state = as.character(first_state),
+    year = as.character(year)
+  )
+
 # Merge predictions back to full dataset
 df_top10 <- df_top10 %>%
   left_join(
-    df_est %>% select(user_id, first_rcid, first_city, year, y_hat),
-    by = c("user_id", "first_rcid", "first_city", "year")
+    df_est %>% select(user_id, first_rcid, first_state, year, y_hat),
+    by = c("user_id", "first_rcid", "first_state", "year")
   )
 
 cat("[INFO] Merged predictions back into full dataset.\n")
 cat("[DEBUG] Non-missing y_hat:", sum(!is.na(df_top10$y_hat)), "of", nrow(df_top10), "\n")
 
-# ✅ Step 2: Keep the relevant subset
+# Step 2: Keep the relevant subset
 df_base <- df_top10 %>%
-  select(user_id, first_rcid, first_city, year, n_patents, y_hat)
+  select(user_id, first_rcid, first_state, year, n_patents, y_hat)
 
 # Step 3: Read and merge fixed effects
 read_fe <- function(name, key) {
@@ -190,7 +213,7 @@ read_fe <- function(name, key) {
 
 fe_user  <- read_fe("user_id", "user_id")
 fe_rcid  <- read_fe("first_rcid", "first_rcid")
-fe_city  <- read_fe("first_city", "first_city")
+fe_state  <- read_fe("first_state", "first_state")
 fe_year  <- read_fe("year", "year")
 
 # Harmonize ID types
@@ -198,20 +221,20 @@ df_base <- df_base %>%
   mutate(
     user_id = as.character(user_id),
     first_rcid = as.character(first_rcid),
-    first_city = as.character(first_city),
+    first_state = as.character(first_state),
     year = as.character(year)
   )
 
 if (!is.null(fe_user)) fe_user <- fe_user %>% mutate(user_id = as.character(user_id))
 if (!is.null(fe_rcid)) fe_rcid <- fe_rcid %>% mutate(first_rcid = as.character(first_rcid))
-if (!is.null(fe_city)) fe_city <- fe_city %>% mutate(first_city = as.character(first_city))
+if (!is.null(fe_state)) fe_state <- fe_state %>% mutate(first_state = as.character(first_state))
 if (!is.null(fe_year)) fe_year <- fe_year %>% mutate(year = as.character(year))
 
 # Step 4: Merge everything together
 decomp <- df_base
 if (!is.null(fe_user))  decomp <- decomp %>% left_join(fe_user,  by = "user_id")
 if (!is.null(fe_rcid))  decomp <- decomp %>% left_join(fe_rcid,  by = "first_rcid")
-if (!is.null(fe_city))  decomp <- decomp %>% left_join(fe_city,  by = "first_city")
+if (!is.null(fe_state))  decomp <- decomp %>% left_join(fe_state,  by = "first_state")
 if (!is.null(fe_year))  decomp <- decomp %>% left_join(fe_year,  by = "year")
 
 # Step 5: Save unified decomposition dataset (including y_hat)

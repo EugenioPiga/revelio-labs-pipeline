@@ -13,10 +13,10 @@
 # HOW TO USE THIS SCRIPT
 #
 # Run one event window (e.g., ±2 years) manually:
-#       WINDOW=2 sbatch event_ppml_feglm_window.sh
+#       WINDOW=2 sbatch event_ppml_feglm_window.sbatch
 #
 # Run multiple windows in parallel (recommended):
-#       for W in 1 2 3 7; do sbatch --export=WINDOW=$W event_ppml_feglm_window.sh; done
+#       for W in 1 2 3 7; do sbatch --export=WINDOW=$W event_ppml_feglm_window.sbatch; done
 #
 #     Each submission runs a separate job for ±1, ±2, ±3, ±7, producing outputs:
 #       coefficients_city_t1.csv, coefficients_city_t2.csv, etc.
