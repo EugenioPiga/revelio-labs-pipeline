@@ -44,7 +44,7 @@ TENURE_DIR <- "/home/epiga/revelio_labs/output/eventstudy_tenure_ppml_feglm"
 OUT_DIR    <- "/home/epiga/revelio_labs/output/eventstudy_feglm_combined/aggregated"
 dir.create(OUT_DIR, showWarnings = FALSE, recursive = TRUE)
 
-mover_types <- c("city", "firm", "firm_within_city")
+mover_types <- c("state", "metro", "firm", "firm_within_state", "firm_within_metro")
 T_max <- 8
 
 # Parse windows from command line

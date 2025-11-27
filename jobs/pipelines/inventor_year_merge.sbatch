@@ -43,17 +43,3 @@ echo "[JAVA] Using $(java -version 2>&1 | head -n 1)"
 
 # --- 4) Run shard task
 python "$HOME/revelio_labs/inventor_year_merge.py" $SLURM_ARRAY_TASK_ID
-
-# --- 5) Optional final merge (only run once after array completes)
-if [ "${SLURM_ARRAY_TASK_ID}" -eq 0 ]; then
-  echo "[INFO] Starting final merge of shards..."
-  python - <<'EOF'
-from pyspark.sql import SparkSession
-spark = SparkSession.builder.appName("merge_all_shards").getOrCreate()
-df = spark.read.parquet("/labs/khanna/linkedin_202507/processed/inventor_year_shards/")
-print("[INFO] Final merged row count:", df.count())
-df.write.mode("overwrite").parquet("/labs/khanna/linkedin_202507/processed/inventor_year_merged")
-print("[INFO] Final merged dataset written successfully.")
-spark.stop()
-EOF
-fi

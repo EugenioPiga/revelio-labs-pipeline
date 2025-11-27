@@ -69,7 +69,9 @@ make_market_key <- function(dt, mover_type) {
     mover_type,
     "firm" = dt[, mkt := as.character(first_rcid)],
     "state" = dt[, mkt := as.character(first_state)],
+    "metro" = dt[, mkt := as.character(first_metro_area)],
     "firm_within_state" = dt[, mkt := paste0(first_rcid, "||", first_state)],
+    "firm_within_metro" = dt[, mkt := paste0(first_rcid, "||", first_metro_area)],
     stop("Unknown mover_type")
   )
   dt[, mkt := as.character(mkt)]
@@ -193,6 +195,11 @@ cat("[INFO] Rows after year filter:", nrow(df), "\n")
 df[, n_patents := fifelse(is.na(n_patents), 0, n_patents)]
 df[, first_state := na_if(first_state, "empty")]
 
+# only keep US cities
+df <- df %>%
+  filter(first_country == "United States")
+cat("[INFO] Filtered to top 10% U.S. inventors. Remaining rows:", nrow(df), "\n")
+
 # ============================
 # Restrict to top 10% inventors by lifetime patenting
 # ============================
@@ -212,15 +219,6 @@ top_inventors <- inventor_totals %>%
 df <- df %>% semi_join(top_inventors, by = "user_id")
 cat("[INFO] Filtered to top 10% inventors. Remaining rows:", nrow(df), "\n")
 
-# ============================
-# Other filtering
-# ============================
-
-# only keep US cities
-df <- df %>%
-  filter(first_country == "United States")
-cat("[INFO] Filtered to top 10% U.S. inventors. Remaining rows:", nrow(df), "\n")
-
 # =========================
 # Construct Tenure Controls
 # =========================
@@ -237,27 +235,36 @@ cat("[INFO] Tenure controls created. Rows remaining:", nrow(df), "\n")
 # =========================
 # Subset Markets
 # =========================
-df_state   <- df[!is.na(first_state)]
-df_firm   <- df[!is.na(first_rcid)]
-df_fwstate <- df[!is.na(first_rcid) & !is.na(first_state)]
+df_state    <- df[!is.na(first_state)]
+df_metro    <- df[!is.na(first_metro_area)]
+df_firm     <- df[!is.na(first_rcid)]
+df_fwstate  <- df[!is.na(first_rcid) & !is.na(first_state)]
+df_fwmetro  <- df[!is.na(first_rcid) & !is.na(first_metro_area)]
+
 cat("[INFO] Subsets -> state:", nrow(df_state),
-    "| Firm:", nrow(df_firm),
-    "| Firm-within-state:", nrow(df_fwstate), "\n")
+    "| metro:", nrow(df_metro),
+    "| firm:", nrow(df_firm),
+    "| firm-within-state:", nrow(df_fwstate),
+    "| firm-within-metro:", nrow(df_fwmetro), "\n")
 
 # =========================
-# Run Each Event Study
-# =========================
-for (mover_type in c("state","firm","firm_within_state")) {
+for (mover_type in c("state", "metro", "firm", "firm_within_state", "firm_within_metro")) {
+
   dt <- switch(mover_type,
-               "state" = copy(df_state),
-               "firm" = copy(df_firm),
-               "firm_within_state" = copy(df_fwstate))
+               "state"            = copy(df_state),
+               "metro"            = copy(df_metro),
+               "firm"             = copy(df_firm),
+               "firm_within_state"= copy(df_fwstate),
+               "firm_within_metro"= copy(df_fwmetro))
+
   dt <- make_market_key(dt, mover_type)
   dt <- tag_first_move(dt)
   dt <- prep_event_time(dt)
   dt <- compute_delta(dt)
-  cat("[INFO]", mover_type, ": unique movers =", dt[!is.na(move_year), uniqueN(user_id)], "\n")
+
+  cat("[INFO]", mover_type, ": unique movers =",
+      dt[!is.na(move_year), uniqueN(user_id)], "\n")
+
   run_event(dt, mover_type)
 }
-
 cat("[INFO] ✅ Event study with tenure controls (feglm) completed successfully.\n")
