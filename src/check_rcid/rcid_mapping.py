@@ -13,8 +13,31 @@ TARGET_COLUMNS = [
     "ultimate_parent_rcid_name",
     "rcid",
     "company",
+    "sedol",
+    "ticker",
+    "gvkey",
+    "isin",
+    "cusip",
+    "cik",
+    "lei",
+    "naics_code",
+    "factset_entity_id",
+    "year_founded",
 ]
 MAPPING_COLUMNS = ["ultimate_parent_rcid", "rcid"]
+ENTITY_ATTRIBUTE_COLUMNS = [
+    "company",
+    "sedol",
+    "ticker",
+    "gvkey",
+    "isin",
+    "cusip",
+    "cik",
+    "lei",
+    "naics_code",
+    "factset_entity_id",
+    "year_founded",
+]
 
 
 def load_all_parquets(data_dir: Path = DATA_DIR) -> tuple[pd.DataFrame, int]:
@@ -34,27 +57,11 @@ def extract_unique_mapping(df: pd.DataFrame) -> pd.DataFrame:
     return df[MAPPING_COLUMNS].drop_duplicates().reset_index(drop=True)
 
 
-def build_name_lookup(df: pd.DataFrame) -> pd.DataFrame:
-    """Create a unique rcid-to-name lookup table."""
-    child_names = (
-        df[["rcid", "company"]]
-        .dropna(subset=["rcid"])
-        .drop_duplicates(subset="rcid")
-        .rename(columns={"company": "name"})
-    )
-    parent_names = (
-        df[["ultimate_parent_rcid", "ultimate_parent_rcid_name"]]
-        .dropna(subset=["ultimate_parent_rcid"])
-        .drop_duplicates(subset="ultimate_parent_rcid")
-        .rename(
-            columns={
-                "ultimate_parent_rcid": "rcid",
-                "ultimate_parent_rcid_name": "name",
-            }
-        )
-    )
-    combined = pd.concat([child_names, parent_names], ignore_index=True)
-    return combined.drop_duplicates(subset="rcid", keep="first")
+def build_entity_lookup(df: pd.DataFrame) -> pd.DataFrame:
+    """Create a unique rcid-to-attribute lookup table."""
+    columns = ["rcid"] + ENTITY_ATTRIBUTE_COLUMNS
+    existing = [col for col in columns if col in df.columns]
+    return df[existing].dropna(subset=["rcid"]).drop_duplicates(subset="rcid")
 
 
 def rcid_has_unique_parent(mapping: pd.DataFrame) -> pd.DataFrame:
@@ -99,16 +106,26 @@ def resolve_to_top_parent(mapping: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     return resolved, iterations
 
 
-def attach_entity_names(
-    resolved_mapping: pd.DataFrame, name_lookup: pd.DataFrame
+def attach_entity_details(
+    resolved_mapping: pd.DataFrame, entity_lookup: pd.DataFrame
 ) -> pd.DataFrame:
-    """Attach company names for rcid and ultimate parent rcid."""
-    child_names = name_lookup.rename(columns={"name": "rcid_name"})
-    parent_names = name_lookup.rename(
-        columns={"rcid": "ultimate_parent_rcid_new", "name": "ultimate_parent_rcid_name"}
+    """Attach company names and attributes for rcid and ultimate parent rcid."""
+    child_renames = {
+        col: f"rcid_{col}" if col != "company" else "rcid_name"
+        for col in entity_lookup.columns
+        if col != "rcid"
+    }
+    child_lookup = entity_lookup.rename(columns=child_renames)
+
+    parent_lookup = entity_lookup[["rcid", "company"]].rename(
+        columns={
+            "rcid": "ultimate_parent_rcid_new",
+            "company": "ultimate_parent_rcid_name",
+        }
     )
-    enriched = resolved_mapping.merge(child_names, on="rcid", how="left")
-    return enriched.merge(parent_names, on="ultimate_parent_rcid_new", how="left")
+
+    enriched = resolved_mapping.merge(child_lookup, on="rcid", how="left")
+    return enriched.merge(parent_lookup, on="ultimate_parent_rcid_new", how="left")
 
 
 def report_top_parent_groups(
@@ -156,11 +173,11 @@ def save_crosswalk(
 def main() -> None:
     df, files_loaded = load_all_parquets()
     mapping = extract_unique_mapping(df)
-    name_lookup = build_name_lookup(df)
+    entity_lookup = build_entity_lookup(df)
     duplicates = rcid_has_unique_parent(mapping)
     summary = summarize_mapping(mapping)
     resolved_mapping, iterations = resolve_to_top_parent(mapping)
-    enriched_mapping = attach_entity_names(resolved_mapping, name_lookup)
+    enriched_mapping = attach_entity_details(resolved_mapping, entity_lookup)
 
     print(
         f"Loaded {len(df):,} rows from {files_loaded} parquet file(s) in {DATA_DIR} "
