@@ -107,7 +107,7 @@ def attach_entity_names(
 
 
 def report_top_parent_groups(
-    enriched_mapping: pd.DataFrame, limit: int = 10
+    enriched_mapping: pd.DataFrame, limit: int = 10, child_preview: int = 10
 ) -> None:
     """Print top parent groups with their rcids and company names."""
     parent_counts = (
@@ -128,10 +128,14 @@ def report_top_parent_groups(
         print(
             f"\nUltimate parent {parent_id} ({parent_name}) - {child_count} rcid(s)"
         )
-        children = enriched_mapping.loc[
-            enriched_mapping["ultimate_parent_rcid_new"] == parent_id,
-            ["rcid", "rcid_name"],
-        ].sort_values("rcid")
+        children = (
+            enriched_mapping.loc[
+                enriched_mapping["ultimate_parent_rcid_new"] == parent_id,
+                ["rcid", "rcid_name"],
+            ]
+            .sort_values("rcid")
+            .head(child_preview)
+        )
         print(children.to_string(index=False))
 
 
