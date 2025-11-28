@@ -1,10 +1,11 @@
-"""Inspect rcid to ultimate parent mapping using the first parquet file."""
+"""Inspect rcid to ultimate parent mapping using all parquet files."""
 
 from pathlib import Path
 
 import pandas as pd
 
 DATA_DIR = Path("/labs/khanna/linkedin_202507/academic_company_ref")
+OUTPUT_PATH = Path("/labs/khanna/linkedin_202507/processed/rcid_parent_crosswalk.parquet")
 TARGET_COLUMNS = [
     "ultimate_parent_rcid",
     "ultimate_parent_rcid_name",
@@ -14,14 +15,16 @@ TARGET_COLUMNS = [
 MAPPING_COLUMNS = ["ultimate_parent_rcid", "rcid"]
 
 
-def load_first_parquet(data_dir: Path = DATA_DIR) -> pd.DataFrame:
-    """Load only the first parquet file in the directory."""
-    first_file = next(iter(sorted(data_dir.glob("*.parquet"))), None)
-    if first_file is None:
+def load_all_parquets(data_dir: Path = DATA_DIR) -> tuple[pd.DataFrame, int]:
+    """Load and concatenate every parquet file in the directory."""
+    parquet_files = sorted(data_dir.glob("*.parquet"))
+    if not parquet_files:
         raise FileNotFoundError(f"No parquet files found in {data_dir}")
-    df = pd.read_parquet(first_file, columns=TARGET_COLUMNS)
+
+    frames = [pd.read_parquet(file, columns=TARGET_COLUMNS) for file in parquet_files]
+    df = pd.concat(frames, ignore_index=True)
     df["ultimate_parent_rcid"] = df["ultimate_parent_rcid"].fillna(df["rcid"])
-    return df
+    return df, len(parquet_files)
 
 
 def extract_unique_mapping(df: pd.DataFrame) -> pd.DataFrame:
@@ -139,8 +142,17 @@ def report_top_parent_groups(
         print(children.to_string(index=False))
 
 
+def save_crosswalk(
+    enriched_mapping: pd.DataFrame, output_path: Path = OUTPUT_PATH
+) -> None:
+    """Persist the enriched mapping to parquet."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    enriched_mapping.to_parquet(output_path, index=False)
+    print(f"\nSaved rcid parent crosswalk to {output_path}")
+
+
 def main() -> None:
-    df = load_first_parquet()
+    df, files_loaded = load_all_parquets()
     mapping = extract_unique_mapping(df)
     name_lookup = build_name_lookup(df)
     duplicates = rcid_has_unique_parent(mapping)
@@ -149,8 +161,8 @@ def main() -> None:
     enriched_mapping = attach_entity_names(resolved_mapping, name_lookup)
 
     print(
-        f"Loaded {len(df):,} rows from first parquet in {DATA_DIR} and found "
-        f"{len(mapping):,} unique rcid mappings."
+        f"Loaded {len(df):,} rows from {files_loaded} parquet file(s) in {DATA_DIR} "
+        f"and found {len(mapping):,} unique rcid mappings."
     )
 
     print("\nStep 2: rcid uniqueness check")
@@ -186,6 +198,7 @@ def main() -> None:
         )
 
     report_top_parent_groups(enriched_mapping)
+    save_crosswalk(enriched_mapping, output_path=OUTPUT_PATH)
 
 
 if __name__ == "__main__":
