@@ -5,7 +5,9 @@ from pathlib import Path
 import pandas as pd
 
 DATA_DIR = Path("/labs/khanna/linkedin_202507/academic_company_ref")
-OUTPUT_PATH = Path("/labs/khanna/linkedin_202507/processed/rcid_parent_crosswalk.parquet")
+#OUTPUT_PATH = Path("/labs/khanna/linkedin_202507/processed/rcid_parent_crosswalk.parquet")
+# TODO: Revert to above after resolving permission issues
+OUTPUT_PATH = Path("~/code/revelio-labs-pipeline/data/rcid_parent_crosswalk.parquet")
 TARGET_COLUMNS = [
     "ultimate_parent_rcid",
     "ultimate_parent_rcid_name",
