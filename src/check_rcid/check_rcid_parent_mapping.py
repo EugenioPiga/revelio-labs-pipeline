@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pandas as pd
 
-#pd.set_option("display.max_columns", None)
+pd.set_option("display.max_columns", None)
+pd.set_option("display.expand_frame_repr", False)
 INVENTOR_DIR = Path("/labs/khanna/linkedin_202507/processed/inventor_year_merged")
 CROSSWALK_PATH = Path(
     "/home/gps-yuhei/code/revelio-labs-pipeline/data/rcid_parent_crosswalk.parquet"
@@ -12,6 +13,17 @@ CROSSWALK_PATH = Path(
 FILTER_COUNTRY = "United States"
 FILTER_YEAR = 2018
 TOP_N = 50
+ATTRIBUTE_COLUMNS = [
+    "rcid_sedol",
+    "rcid_ticker",
+    "rcid_gvkey",
+    "rcid_isin",
+    "rcid_cusip",
+    "rcid_cik",
+    "rcid_lei",
+    "rcid_naics_code",
+    "rcid_factset_entity_id",
+]
 
 
 def load_inventor_parquets(data_dir: Path = INVENTOR_DIR) -> pd.DataFrame:
@@ -68,6 +80,17 @@ def summarize_by_id(
     return agg
 
 
+def report_missing_fractions(df: pd.DataFrame) -> None:
+    """Print share of missing values for each attribute, weighted by inventors."""
+    total = len(df)
+    print("\nAttribute missingness (weighted by inventor count):")
+    for column in ATTRIBUTE_COLUMNS:
+        if column not in df.columns:
+            continue
+        missing_fraction = df[column].isna().sum() / total
+        print(f"- {column}: {missing_fraction:.2%} missing")
+
+
 def main() -> None:
     inventor_df = load_inventor_parquets()
     filtered = filter_us_2018(inventor_df)
@@ -93,6 +116,8 @@ def main() -> None:
         merged, "ultimate_parent_rcid_new", "ultimate_parent_rcid_name"
     )
     print(parent_summary)
+
+    report_missing_fractions(merged)
 
 
 if __name__ == "__main__":
