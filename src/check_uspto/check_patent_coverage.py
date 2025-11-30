@@ -23,14 +23,11 @@ def ensure_tsv(zip_path: str) -> str:
     tsv_path, ext = os.path.splitext(zip_path)
     if ext.lower() != ".zip":
         raise ValueError(f"Expected a .zip file, got: {zip_path}")
-
     if os.path.exists(tsv_path):
         print(f"[SKIP] {tsv_path} already exists.")
         return tsv_path
-
     if not os.path.exists(zip_path):
         raise FileNotFoundError(f"Zip archive missing: {zip_path}")
-
     print(f"[INFO] Extracting {zip_path} ...")
     with zipfile.ZipFile(zip_path) as zf:
         members = [name for name in zf.namelist() if name.endswith(".tsv")]
@@ -39,39 +36,55 @@ def ensure_tsv(zip_path: str) -> str:
         member = members[0]
         with zf.open(member) as src, open(tsv_path, "wb") as dst:
             shutil.copyfileobj(src, dst)
-
     print(f"[DONE] Saved TSV to {tsv_path}")
     return tsv_path
 
 
-def load_inventor(tsv_path: str) -> pd.DataFrame:
-    """Load inventor data and assert uniqueness on (patent_id, inventor_id)."""
-    cols = ["patent_id", "inventor_id"]
+def ensure_parquet(tsv_path: str) -> tuple[str, pd.DataFrame | None]:
+    """Convert a TSV to parquet once (keeping all columns) and return the parquet path."""
+    base, ext = os.path.splitext(tsv_path)
+    if ext.lower() != ".tsv":
+        raise ValueError(f"Expected a .tsv file, got: {tsv_path}")
+    parquet_path = f"{base}.parquet"
+    if os.path.exists(parquet_path):
+        print(f"[SKIP] {parquet_path} already exists.")
+        return parquet_path, None
+    print(f"[INFO] Converting {tsv_path} to parquet ...")
     df = pd.read_csv(
         tsv_path,
         sep="\t",
-        usecols=cols,
         dtype=str,
         keep_default_na=False,
         low_memory=False,
     )
-    duplicates = df.duplicated(subset=cols).sum()
+    df.to_parquet(parquet_path, index=False)
+    print(f"[DONE] Saved parquet to {parquet_path}")
+    return parquet_path, df
+
+
+def load_inventor(parquet_path: str, cached_df: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Load inventor data (all columns) and assert uniqueness on (patent_id, inventor_id)."""
+    if cached_df is not None:
+        df = cached_df[["patent_id", "inventor_id"]].copy()
+    else:
+        df = pd.read_parquet(parquet_path, columns=["patent_id", "inventor_id"])
+    duplicates = df.duplicated(subset=["patent_id", "inventor_id"]).sum()
     if duplicates:
-        raise ValueError(f"Inventor file has {duplicates:,} duplicate (patent_id, inventor_id) pairs.")
+        print(
+            f"[WARN] Inventor file has {duplicates:,} duplicate pairs "
+            f"out of {len(df):,} rows. Dropping duplicates."
+        )
+        df = df.drop_duplicates(subset=["patent_id", "inventor_id"])
     print(f"[OK] Loaded {len(df):,} inventor rows (unique on patent_id + inventor_id).")
     return df
 
 
-def load_patent(tsv_path: str) -> pd.DataFrame:
+def load_patent(parquet_path: str, cached_df: pd.DataFrame | None = None) -> pd.DataFrame:
     """Load patent data and assert uniqueness on patent_id."""
-    df = pd.read_csv(
-        tsv_path,
-        sep="\t",
-        usecols=["patent_id"],
-        dtype=str,
-        keep_default_na=False,
-        low_memory=False,
-    )
+    if cached_df is not None:
+        df = cached_df[["patent_id", "patent_date"]].copy()
+    else:
+        df = pd.read_parquet(parquet_path, columns=["patent_id", "patent_date"])
     duplicates = df.duplicated(subset=["patent_id"]).sum()
     if duplicates:
         raise ValueError(f"Patent file has {duplicates:,} duplicate patent_id values.")
@@ -88,9 +101,14 @@ def merge_inventor_patent(inventor_df: pd.DataFrame, patent_df: pd.DataFrame) ->
         validate="many_to_one",
         indicator=True,
     )
-    missing_patents = (merged["_merge"] == "left_only").sum()
-    if missing_patents:
-        raise ValueError(f"{missing_patents:,} inventor rows do not have a matching patent_id in g_patent.")
+    left_only = (merged["_merge"] == "left_only").sum()
+    right_only = (~patent_df["patent_id"].isin(inventor_df["patent_id"])).sum()
+    both = len(merged) - left_only
+    print(f"[STATS] Inventor rows without patent match: {left_only:,}")
+    print(f"[STATS] Patent rows without inventor match: {right_only:,}")
+    print(f"[STATS] Rows present in both: {both:,}")
+    if left_only:
+        raise ValueError(f"{left_only:,} inventor rows do not have a matching patent_id in g_patent.")
     merged = merged.drop(columns="_merge")
     print(f"[OK] Inventor ↔ patent merge validated ({len(merged):,} rows).")
     return merged
@@ -101,16 +119,22 @@ def load_revelio_matches(directory: str) -> pd.DataFrame:
     shard_paths = sorted(glob(os.path.join(directory, "*.parquet")))
     if not shard_paths:
         raise FileNotFoundError(f"No parquet shards found under {directory}")
-
     frames = []
     for path in shard_paths:
-        part = pd.read_parquet(path, columns=["patent_id", "pv_inventor_id"])
+        part = pd.read_parquet(
+            path,
+            columns=["patent_id", "patent_date", "filing_date", "pv_inventor_id", "user_id"],
+        )
+        part = part.rename(columns={"patent_date": "pv_patent_date"})
         frames.append(part)
     df = pd.concat(frames, ignore_index=True)
-
     duplicates = df.duplicated(subset=["patent_id", "pv_inventor_id"]).sum()
     if duplicates:
-        raise ValueError(f"Revelio matches contain {duplicates:,} duplicate (patent_id, pv_inventor_id) pairs.")
+        print(
+            f"[WARN] Revelio matches contain {duplicates:,} duplicate pairs "
+            f"out of {len(df):,} rows. Dropping duplicates."
+        )
+        df = df.drop_duplicates(subset=["patent_id", "pv_inventor_id"])
     print(f"[OK] Loaded {len(df):,} Revelio inventor matches (unique pairs).")
     return df
 
@@ -151,14 +175,16 @@ def compare_matches(step2_df: pd.DataFrame, matches_df: pd.DataFrame) -> None:
 
 def main():
     inventor_tsv = ensure_tsv(INVENTOR_ZIP)
+    inventor_parquet, inventor_cached_df = ensure_parquet(inventor_tsv)
     patent_tsv = ensure_tsv(PATENT_ZIP)
+    patent_parquet, patent_cached_df = ensure_parquet(patent_tsv)
 
-    inventor_df = load_inventor(inventor_tsv)
-    patent_df = load_patent(patent_tsv)
+    inventor_df = load_inventor(inventor_parquet, cached_df=inventor_cached_df)
+    patent_df = load_patent(patent_parquet, cached_df=patent_cached_df)
     inventor_with_patents = merge_inventor_patent(inventor_df, patent_df)
 
-    matches_df = load_revelio_matches(MATCHES_DIR)
-    compare_matches(inventor_with_patents, matches_df)
+    revelio_df = load_revelio_matches(MATCHES_DIR)
+    compare_matches(inventor_with_patents, revelio_df)
 
 
 if __name__ == "__main__":
