@@ -15,15 +15,28 @@ MERGED_DIR = "/labs/khanna/linkedin_202507/processed/inventor_year_merged"
 spark = (
     SparkSession.builder
     .appName(f"inventor_year_merge_shard_{SHARD_INDEX}")
-    .config("spark.driver.memory", "16g")
-    .config("spark.executor.memory", "16g")
+    .config("spark.driver.memory", "200g")
+    .config("spark.executor.memory", "200g")
+
+    # LOCAL DIRS AWAY FROM HOME QUOTA
+    .config("spark.local.dir", "/labs/khanna/linkedin_202507/spark_local")
+    .config("spark.sql.warehouse.dir", "/labs/khanna/linkedin_202507/spark_warehouse")
+    .config("spark.driver.extraJavaOptions", "-Djava.io.tmpdir=/labs/khanna/linkedin_202507/spark_tmp")
+    .config("spark.executor.extraJavaOptions", "-Djava.io.tmpdir=/labs/khanna/linkedin_202507/spark_tmp")
+
     .getOrCreate()
 )
 
 spark.sparkContext.setLogLevel("INFO")
 
+spark.conf.set("spark.sql.parquet.datetimeRebaseModeInRead", "LEGACY")
+spark.conf.set("spark.sql.parquet.int96RebaseModeInRead", "LEGACY")
+
+print("[DEBUG] datetimeRebaseModeInRead =", spark.conf.get("spark.sql.parquet.datetimeRebaseModeInRead"))
+print("[DEBUG] int96RebaseModeInRead =", spark.conf.get("spark.sql.parquet.int96RebaseModeInRead"))
+
 # Set checkpoint dir for safety
-checkpoint_dir = os.path.expanduser("~/scratch/spark_checkpoints")
+checkpoint_dir = "/labs/khanna/linkedin_202507/scratch/spark_checkpoints"
 os.makedirs(checkpoint_dir, exist_ok=True)
 spark.sparkContext.setCheckpointDir(checkpoint_dir)
 
@@ -71,14 +84,26 @@ pos = (
 )
 
 print("[INFO] Reading patent matches...")
-pat = spark.read.parquet(INPUT_PAT)
+
+pat = (
+    spark.read
+         .option("datetimeRebaseMode", "LEGACY")
+         .option("int96RebaseMode", "LEGACY")
+         .parquet(INPUT_PAT)
+)
+
+pat = pat.withColumn(
+    "filing_date",
+    F.when(col("filing_date") < F.to_date(F.lit("1900-01-01")), None)
+     .otherwise(col("filing_date"))
+)
 
 # -----------------------------
 # 2. Patent side aggregation
 # -----------------------------
 print("[INFO] Aggregating patent data...")
 pat_year = (
-    pat.withColumn("year", year("patent_date"))
+    pat.withColumn("year", year("filing_date"))
        .filter(col("year").isNotNull())
        .groupBy("user_id", "year")
        .agg(
@@ -120,6 +145,8 @@ pos_year = (
     .agg(
         countDistinct("position_id").alias("n_positions"),
         countDistinct("rcid").alias("n_unique_companies"),
+        F.first("position_id", ignorenulls=True).alias("first_position_id"),
+
         F.mean("salary").alias("avg_salary"),
         F.min("salary").alias("min_salary"),
         F.max("salary").alias("max_salary"),
@@ -144,9 +171,11 @@ pos_year = (
         F.first("location_raw", ignorenulls=True).alias("first_location_raw"),
         F.last("location_raw", ignorenulls=True).alias("last_location_raw"),
 
-        # --- NEW: choose earliest firm that starts in that year ---
+        # --- Choose earliest firm that starts in that year ---
         F.first("rcid", ignorenulls=True).alias("first_rcid"),
-        F.last("rcid", ignorenulls=True).alias("last_rcid")
+        F.last("rcid", ignorenulls=True).alias("last_rcid"),
+        F.first("ultimate_parent_rcid", ignorenulls=True).alias("first_parent_rcid"),
+        F.last("ultimate_parent_rcid", ignorenulls=True).alias("last_parent_rcid")
     )
 )
 
@@ -166,17 +195,28 @@ pos_year = (
 check_dupes(pos_year, "After POS yearly aggregation")
 
 
-# 2️⃣ Compute the global maximum year across all data (patents + positions)
-pat_with_year = pat.withColumn("year", F.year("patent_date"))
+# 2️⃣ Compute global maximum year across patents + positions
+pat_with_year = pat.withColumn("year", F.year("filing_date"))
 max_pat_year = pat_with_year.select(F.max("year")).collect()[0][0]
 max_pos_year = pos_year.select(F.max("year")).collect()[0][0]
-global_max_year = int(max(max_pat_year, max_pos_year))
+
+# Handle None values
+years = [y for y in [max_pat_year, max_pos_year] if y is not None]
+
+if len(years) == 0:
+    print("[WARN] No valid years in this shard. Skipping shard...")
+    sys.exit(0)
+
+global_max_year = int(max(years))
 print(f"[INFO] Global maximum year detected: {global_max_year}")
 
 # 3️⃣ Compute min and max years per user (extend all to global max)
-year_bounds = pos_year.groupBy("user_id").agg(
-    F.min("year").alias("min_year")
-).withColumn("max_year", F.lit(global_max_year))
+year_bounds = (
+    pos_year.groupBy("user_id")
+    .agg(F.min("year").alias("min_year"))
+    .filter(F.col("min_year").isNotNull())
+    .withColumn("max_year", F.lit(global_max_year))
+)
 
 # 4️⃣ Generate full sequence for each inventor
 year_seq = (
@@ -201,10 +241,10 @@ pos_year_full = (
 # 7️⃣ Forward-fill key firm and location fields using window
 w = Window.partitionBy("user_id").orderBy("year").rowsBetween(Window.unboundedPreceding, 0)
 cols_to_fill = [
-    "first_rcid", "first_city", "first_state", "first_country",
-    "first_region", "first_metro_area", "first_location_raw",
-    "last_rcid", "last_city", "last_state", "last_country",
-    "last_region", "last_metro_area", "last_location_raw"
+    "first_rcid", "first_city", "first_parent_rcid", "last_parent_rcid",
+    "first_state", "first_country", "first_region", "first_metro_area", 
+    "first_location_raw", "last_rcid", "last_city", "last_state", 
+    "last_country", "last_region", "last_metro_area", "last_location_raw", "first_position_id"
 ]
 
 print("[DEBUG] Performing forward-fill for firm/location columns...")
