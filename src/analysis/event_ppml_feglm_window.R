@@ -68,11 +68,14 @@ cat("=========================================\n\n")
 make_market_key <- function(dt, mover_type) {
   switch(
     mover_type,
+    "parent"  = dt[, mkt := as.character(first_parent_rcid)],
     "firm"  = dt[, mkt := as.character(first_rcid)],
     "state" = dt[, mkt := as.character(first_state)],
     "metro" = dt[, mkt := as.character(first_metro_area)],
     "firm_within_state" = dt[, mkt := paste0(first_rcid, "||", first_state)],
-    "firm_within_metro" = dt[, mkt := paste0(first_rcid, "||", first_metro_area)],  # <-- NEW
+    "firm_within_metro" = dt[, mkt := paste0(first_rcid, "||", first_metro_area)],
+    "parent_within_state" = dt[, mkt := paste0(first_parent_rcid, "||", first_state)],
+    "parent_within_metro" = dt[, mkt := paste0(first_parent_rcid, "||", first_metro_area)],
     stop("Unknown mover_type")
   )
   dt[, mkt := as.character(mkt)]
@@ -248,16 +251,22 @@ run_window <- function(min_pre, min_post, suffix) {
   df_state   <- df[!is.na(first_state)]
   df_metro   <- df[!is.na(first_metro_area)]  
   df_firm   <- df[!is.na(first_rcid)]
+  df_parent <- df[!is.na(first_parent_rcid)]
   df_fwstate <- df[!is.na(first_rcid) & !is.na(first_state)]
   df_fwmetro <- df[!is.na(first_rcid) & !is.na(first_metro_area)]
+  df_pwstate <- df[!is.na(first_parent_rcid) & !is.na(first_state)]
+  df_pwmetro <- df[!is.na(first_parent_rcid) & !is.na(first_metro_area)]
 
-  for (mover_type in c("state","metro","firm","firm_within_state","firm_within_metro")) {
+  for (mover_type in c("state","metro","firm","parent", "parent_within_state", "parent_within_metro", "firm_within_state","firm_within_metro")) {
     dt <- switch(mover_type,
                  "state" = copy(df_state),
                  "metro" = copy(df_metro),
                  "firm" = copy(df_firm),
+                 "parent" = copy(df_parent),
                  "firm_within_state" = copy(df_fwstate),
-                 "firm_within_metro" = copy(df_fwmetro) 
+                 "firm_within_metro" = copy(df_fwmetro),
+                 "parent_within_state" = copy(df_pwstate),
+                 "parent_within_metro" = copy(df_pwmetro)
                   )
     dt <- make_market_key(dt, mover_type)
     dt <- tag_first_move(dt)
