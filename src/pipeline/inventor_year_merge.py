@@ -83,6 +83,27 @@ pos = (
     .filter(col("shard") == SHARD_INDEX)
 )
 
+company_ref = (
+    spark.read.parquet("/labs/khanna/linkedin_202507/academic_company_ref")
+         .select("rcid", "ultimate_parent_rcid")
+)
+
+pos = (
+    pos
+    .join(company_ref.withColumnRenamed(
+        "ultimate_parent_rcid", "parent_from_ref"
+    ), on="rcid", how="left")
+    .withColumn(
+        "ultimate_parent_rcid",
+        F.coalesce(
+            col("ultimate_parent_rcid"),  
+            col("parent_from_ref"),         
+            col("rcid")                     
+        )
+    )
+    .drop("parent_from_ref")
+)
+
 print("[INFO] Reading patent matches...")
 
 pat = (
@@ -94,8 +115,11 @@ pat = (
 
 pat = pat.withColumn(
     "filing_date",
-    F.when(col("filing_date") < F.to_date(F.lit("1900-01-01")), None)
-     .otherwise(col("filing_date"))
+    F.when(
+        (col("filing_date") < F.to_date(F.lit("1950-01-01"))) |
+        (col("filing_date") > F.to_date(F.lit("2025-12-31"))),
+        None
+    ).otherwise(col("filing_date"))
 )
 
 # -----------------------------
