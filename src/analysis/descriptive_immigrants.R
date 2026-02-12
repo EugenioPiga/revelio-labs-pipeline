@@ -66,14 +66,20 @@ dir.create(PLOTS_DIR, recursive = TRUE, showWarnings = FALSE)
 dir.create(TEXT_DIR,  recursive = TRUE, showWarnings = FALSE)
 
 MIN_CLUSTER <- 10
-USE_LAST_N_YEARS <- 16
+USE_LAST_N_YEARS <- 10
 
 # top categories in plots
 TOP_FIELDS_N    <- 9
 TOP_COUNTRIES_N <- 12
 
-TENURE_BIN_WIDTH <- 5
+# ---- Binning knobs ----
 TENURE_MAX <- 50
+
+TENURE_BIN_WIDTH_COMP <- 10  # for composition plots (0-10,10-20,...)
+TENURE_BIN_WIDTH_MOVE <- 10  # for "young/old" move plots
+
+LOGCL_BIN_WIDTH <- 2
+LOGCL_BIN_MAX   <- 16
 
 TOP_ORIGINS_N <- 12
 TOP_FIELDS_COMP_N <- 9  # keep 9 for fields (you had TOP_FIELDS_N=9)
@@ -160,9 +166,21 @@ compute_tenure <- function(df) {
     filter(!is.na(tenure))
 }
 
-make_tenure_bins <- function(tenure) {
-  breaks <- seq(0, TENURE_MAX, by = TENURE_BIN_WIDTH)
+make_tenure_bins <- function(tenure, width = TENURE_BIN_WIDTH_COMP, maxv = TENURE_MAX) {
+  breaks <- seq(0, maxv, by = width)
   cut(tenure, breaks = breaks, right = FALSE, include.lowest = TRUE)
+}
+
+make_logcluster_bins <- function(log_cluster, width = LOGCL_BIN_WIDTH, maxv = LOGCL_BIN_MAX) {
+  br <- c(seq(0, maxv, by = width), Inf)
+  cut(log_cluster, breaks = br, right = FALSE, include.lowest = TRUE)
+}
+
+# Weighted mean helper (safe)
+wmean <- function(x, w) {
+  ok <- is.finite(x) & is.finite(w) & !is.na(x) & !is.na(w) & w > 0
+  if (!any(ok)) return(NA_real_)
+  sum(x[ok] * w[ok]) / sum(w[ok])
 }
 
 # ============================
@@ -283,8 +301,11 @@ build_panels <- function(ds, year_val, geo_var, immig_var, min_cluster = 50, fir
       immig_share  = ifelse(cluster_size > 0, n_immigrant / cluster_size, NA_real_),
       .groups = "drop"
     ) %>%
-    mutate(log_cluster = log(cluster_size)) %>%
-    filter(cluster_size >= min_cluster)
+      mutate(
+        log_cluster = log(cluster_size),
+        log_cluster_bin = make_logcluster_bins(log_cluster)
+      ) %>%
+      filter(cluster_size >= min_cluster)
 
   if (nrow(cluster_stats) == 0) {
     return(list(
@@ -298,7 +319,8 @@ build_panels <- function(ds, year_val, geo_var, immig_var, min_cluster = 50, fir
       base_year = base
     ))
   }
-
+  
+  
   # -------------------------
   # (B) avg patents by group + OVERALL
   # -------------------------
@@ -367,6 +389,45 @@ if ("career_modal_section" %in% names(base)) {
   }
 }
 
+class_prod_vs_immshare_long <- tibble()
+if ("career_modal_class" %in% names(base)) {
+
+  bb <- base %>%
+    filter(!is.na(career_modal_class),
+           career_modal_class != "",
+           career_modal_class != "empty") %>%
+    mutate(career_class = as.character(career_modal_class))
+
+  # pick top classes among immigrants (within this year×geo slice)
+  top_cls <- bb %>%
+    filter(immig_flag == 1L) %>%
+    group_by(career_class) %>%
+    summarise(total = n_distinct(user_id), .groups = "drop") %>%
+    arrange(desc(total)) %>%
+    slice_head(n = TOP_FIELDS_N) %>%
+    pull(career_class)
+
+  if (length(top_cls) > 0) {
+
+    class_prod_vs_immshare_long <- bb %>%
+      filter(career_class %in% top_cls) %>%
+      group_by(geo_level, career_class, immig_flag) %>%
+      summarise(
+        avg_patents = mean(n_patents, na.rm = TRUE),
+        n_group     = n_distinct(user_id),
+        .groups = "drop"
+      ) %>%
+      mutate(group = ifelse(immig_flag == 1L, "immigrant", "nonimmigrant")) %>%
+      select(-immig_flag) %>%
+      left_join(cluster_stats, by = "geo_level") %>%
+      filter(!is.na(immig_share), is.finite(immig_share), n_group >= 3) %>%
+      mutate(
+        group = factor(group, levels = c("nonimmigrant", "immigrant")),
+        career_class = factor(career_class, levels = top_cls)
+      )
+  }
+}
+
   # -------------------------
   # (D-comp) Tenure composition among immigrants
   # -------------------------
@@ -375,7 +436,7 @@ if (all(c("first_startdate_edu","first_startdate_pos") %in% names(base))) {
 
   immt <- compute_tenure(base) %>%
     filter(immig_flag == 1L) %>%
-    mutate(tenure_bin = make_tenure_bins(tenure)) %>%
+    mutate(tenure_bin = make_tenure_bins(tenure, width = TENURE_BIN_WIDTH_COMP)) %>%
     filter(!is.na(tenure_bin))
 
   if (nrow(immt) > 0) {
@@ -401,6 +462,26 @@ if (all(c("first_startdate_edu","first_startdate_pos") %in% names(base))) {
       ) %>%
       filter(!is.na(share_cat), is.finite(log_cluster))
   }
+}
+
+young_prod_vs_immshare_long <- tibble()
+if (all(c("first_startdate_edu","first_startdate_pos") %in% names(base))) {
+
+  bt <- compute_tenure(base) %>%
+    filter(!is.na(geo_level)) %>%
+    filter(tenure >= 0, tenure < 10) %>%            # <-- young bin
+    mutate(group = ifelse(immig_flag == 1L, "young_immigrant", "young_nonimmigrant"))
+
+  young_prod_vs_immshare_long <- bt %>%
+    group_by(geo_level, group) %>%
+    summarise(
+      avg_patents = mean(n_patents, na.rm = TRUE),
+      n_group     = n_distinct(user_id),
+      .groups = "drop"
+    ) %>%
+    left_join(cluster_stats, by = "geo_level") %>%
+    filter(!is.na(immig_share), is.finite(immig_share), n_group >= 3) %>%  # min support
+    mutate(group = factor(group, levels = c("young_nonimmigrant", "young_immigrant")))
 }
 
 # -------------------------
@@ -482,45 +563,49 @@ make_within_section_subclass_long <- function(base,
 
   # immigrants in this SECTION (big bucket)
   immS <- base %>%
-  filter(
-    immig_flag == 1L,
-    !is.na(.data[[subclass_var]]),
-    .data[[subclass_var]] != "",
-    .data[[subclass_var]] != "empty",
-    substr(.data[[subclass_var]], 1, 1) == section_letter
-  ) %>%
-  mutate(subcat = as.character(.data[[subclass_var]]))
+    filter(
+      immig_flag == 1L,
+      !is.na(.data[[subclass_var]]),
+      .data[[subclass_var]] != "",
+      .data[[subclass_var]] != "empty",
+      substr(.data[[subclass_var]], 1, 1) == section_letter
+    ) %>%
+    mutate(subcat = as.character(.data[[subclass_var]]))
 
   if (nrow(immS) == 0) return(tibble())
 
-  # denom: immigrants in this SECTION by cluster
-  denom <- immS %>%
-    group_by(geo_level) %>%
-    summarise(n_S = n_distinct(user_id), .groups = "drop")
-
-  # top subclasses overall (within section)
+  # top subclasses overall (within this section)
   top_sub <- immS %>%
     group_by(subcat) %>%
-    summarise(total = n_distinct(user_id), .groups="drop") %>%
+    summarise(total = n_distinct(user_id), .groups = "drop") %>%
     arrange(desc(total)) %>%
     slice_head(n = top_n) %>%
     pull(subcat)
 
+  if (length(top_sub) == 0) return(tibble())
+
+  # counts by geo × subclass (within this section)
   counts <- immS %>%
     filter(subcat %in% top_sub) %>%
     group_by(geo_level, subcat) %>%
-    summarise(n_sub = n_distinct(user_id), .groups="drop")
+    summarise(n_sub = n_distinct(user_id), .groups = "drop")
+
+  # denom: ALL immigrants in cluster (not just immigrants in this section)
+  denom_allimm <- base %>%
+    filter(immig_flag == 1L) %>%
+    group_by(geo_level) %>%
+    summarise(n_immig_all = n_distinct(user_id), .groups = "drop")
 
   out <- tidyr::crossing(
-    geo_level = unique(cluster_stats$geo_level),
-    subcat    = top_sub
-  ) %>%
+      geo_level = unique(cluster_stats$geo_level),
+      subcat    = top_sub
+    ) %>%
     left_join(counts, by = c("geo_level","subcat")) %>%
     mutate(n_sub = dplyr::coalesce(n_sub, 0L)) %>%
-    left_join(denom, by = "geo_level") %>%
+    left_join(denom_allimm, by = "geo_level") %>%
     left_join(cluster_stats, by = "geo_level") %>%
     mutate(
-      share_cat = ifelse(!is.na(n_S) & n_S > 0, n_sub / n_S, NA_real_),
+      share_cat = ifelse(!is.na(n_immig_all) & n_immig_all > 0, n_sub / n_immig_all, NA_real_),
       subcat = factor(subcat, levels = top_sub)
     ) %>%
     filter(!is.na(share_cat), is.finite(log_cluster))
@@ -547,6 +632,121 @@ h_comp_long <- make_within_section_subclass_long(
   cluster_stats = cluster_stats
 )
 
+# -------------------------
+# Avg tenure by geo × group (immigrant vs nonimmigrant)
+# -------------------------
+tenure_avg_long <- tibble()
+if (all(c("first_startdate_edu","first_startdate_pos") %in% names(base))) {
+  ten0 <- compute_tenure(base) %>%
+    mutate(group2 = factor(ifelse(immig_flag == 1L, "immigrant", "nonimmigrant"),
+                           levels = c("nonimmigrant","immigrant")))
+
+  tenure_avg_long <- ten0 %>%
+    group_by(geo_level, group2) %>%
+    summarise(avg_tenure = mean(tenure, na.rm = TRUE), .groups = "drop") %>%
+    left_join(cluster_stats, by = "geo_level") %>%
+    filter(!is.na(avg_tenure), is.finite(log_cluster))
+}
+
+# -------------------------
+# Origin productivity vs size (India/China/UK) + natives
+# -------------------------
+
+origin_prod_long <- tibble()
+if (all(c("first_university_country","first_pos_country") %in% names(base))) {
+  imm2 <- base %>%
+    filter(immig_flag == 1L) %>%
+    mutate(
+      edu_c = as.character(first_university_country), 
+      pos_c = as.character(first_pos_country),
+      edu_missing = is.na(edu_c) | edu_c %in% c("", "empty"),
+      pos_missing = is.na(pos_c) | pos_c %in% c("", "empty"),
+      edu_is_us = !edu_missing & edu_c == "United States",
+      pos_is_us = !pos_missing & pos_c == "United States",
+      edu_nonUS = !edu_missing & !edu_is_us,
+      pos_nonUS = !pos_missing & !pos_is_us,
+      origin = dplyr::case_when(
+        edu_nonUS ~ edu_c,
+        !edu_nonUS & pos_nonUS ~ pos_c,
+        TRUE ~ NA_character_
+      )
+    ) %>%
+    filter(!is.na(origin), origin != "")
+
+  keep_o <- c("India","China","United Kingdom", "Japan", "South Korea")
+
+  imm_o <- imm2 %>%
+    filter(origin %in% keep_o) %>%
+    group_by(geo_level, origin) %>%
+    summarise(avg_patents = mean(n_patents, na.rm = TRUE), .groups = "drop") %>%
+    mutate(group = origin)
+
+  nat_o <- base %>%
+    filter(immig_flag == 0L) %>%
+    group_by(geo_level) %>%
+    summarise(avg_patents = mean(n_patents, na.rm = TRUE), .groups = "drop") %>%
+    mutate(group = "native")
+
+  origin_prod_long <- bind_rows(imm_o, nat_o) %>%
+    left_join(cluster_stats, by = "geo_level") %>%
+    filter(!is.na(avg_patents), is.finite(log_cluster)) %>%
+    mutate(group = factor(group, levels = c("native", keep_o)))
+}
+
+# -------------------------
+# Origin productivity vs immigrant share (India/China/UK + natives)
+# y = avg patents for group in cluster-year
+# x = immig_share of cluster-year
+# -------------------------
+origin_prod_vs_immshare_long <- tibble()
+if (all(c("first_university_country","first_pos_country") %in% names(base))) {  
+  imm2 <- base %>%
+    filter(immig_flag == 1L) %>%
+    mutate(
+      edu_c = as.character(first_university_country),
+      pos_c = as.character(first_pos_country),
+      edu_missing = is.na(edu_c) | edu_c %in% c("", "empty"),
+      pos_missing = is.na(pos_c) | pos_c %in% c("", "empty"),
+      edu_is_us = !edu_missing & edu_c == "United States",
+      pos_is_us = !pos_missing & pos_c == "United States",
+      edu_nonUS = !edu_missing & !edu_is_us,
+      pos_nonUS = !pos_missing & !pos_is_us,
+      origin = dplyr::case_when(
+        edu_nonUS ~ edu_c,
+        !edu_nonUS & pos_nonUS ~ pos_c,
+        TRUE ~ NA_character_
+      )
+    ) %>%
+    filter(!is.na(origin), origin != "")
+
+  keep_o <- c("India","China","United Kingdom", "Japan", "South Korea")
+
+  # immigrants by origin: avg patents in cluster-year
+  imm_o <- imm2 %>%
+    filter(immig_flag == 1L, origin %in% keep_o) %>%
+    group_by(geo_level, origin) %>%
+    summarise(avg_patents = mean(n_patents, na.rm = TRUE),
+              n_group = n_distinct(user_id),
+              .groups = "drop") %>%
+    mutate(group = origin)
+
+  # natives baseline
+  nat_o <- base %>%
+    filter(immig_flag == 0L) %>%
+    group_by(geo_level) %>%
+    summarise(avg_patents = mean(n_patents, na.rm = TRUE),
+              n_group = n_distinct(user_id),
+              .groups = "drop") %>%
+    mutate(group = "native")
+
+  origin_prod_vs_immshare_long <- bind_rows(imm_o, nat_o) %>%
+    left_join(cluster_stats, by = "geo_level") %>%
+    filter(!is.na(avg_patents), !is.na(immig_share), is.finite(immig_share)) %>%
+    mutate(group = factor(group, levels = c("native", keep_o)))
+}
+
+
+
 return(list(
   core = core,
   pat_long = pat_long,
@@ -555,6 +755,11 @@ return(list(
   origin_long = origin_long,
   g_comp_long = g_comp_long,
   h_comp_long = h_comp_long,
+  young_prod_vs_immshare_long = young_prod_vs_immshare_long,
+  tenure_avg_long = tenure_avg_long,
+  class_prod_vs_immshare_long = class_prod_vs_immshare_long,
+  origin_prod_long = origin_prod_long,
+  origin_prod_vs_immshare_long = origin_prod_vs_immshare_long,
   base_year = base
 ))
 }  # closes build_panels()
@@ -571,7 +776,11 @@ plot_one <- function(pan, year_val, geo_name, immig_def) {
   origin_long <- pan$origin_long
   g_comp_long <- pan$g_comp_long
   h_comp_long <- pan$h_comp_long
-
+  class_prod_vs_immshare_long <- pan$class_prod_vs_immshare_long
+  young_prod_vs_immshare_long <- pan$young_prod_vs_immshare_long
+  tenure_avg_long  <- pan$tenure_avg_long
+  origin_prod_long <- pan$origin_prod_long
+  origin_prod_vs_immshare_long <- pan$origin_prod_vs_immshare_long
 
   if (nrow(core) < 10) return(invisible(NULL))
 
@@ -638,6 +847,38 @@ plot_one <- function(pan, year_val, geo_name, immig_def) {
     )
   }
 
+# -------------------------
+# Origin productivity vs cluster size (India/China/UK vs natives)
+# -------------------------
+if (nrow(origin_prod_long) > 0) {
+  save_scatter(
+    df = origin_prod_long,
+    x = "log_cluster", y = "avg_patents", color = "group", w = "cluster_size",
+    title = paste0("Avg patents by origin vs log cluster size (", year_val, ", ", geo_name, ", ", immig_def, ")"),
+    xlab = "log(cluster size)",
+    ylab = "Average patents per inventor-year",
+    filename = paste0("scatter_origin_prod_vs_size__", tag, ".png"),
+    point_alpha = 0.30
+  )
+}
+
+# -------------------------
+# Origin productivity vs immigrant share (India/China/UK vs natives)
+# -------------------------
+if (nrow(origin_prod_vs_immshare_long) > 0) {
+  save_scatter(
+    df = origin_prod_vs_immshare_long,
+    x = "immig_share", y = "avg_patents", color = "group", w = "cluster_size",
+    title = paste0("Avg patents by origin vs immigrant share in cluster (",
+                   year_val, ", ", geo_name, ", ", immig_def, ")"),
+    xlab = "Immigrant share in cluster-year",
+    ylab = "Average patents per inventor-year (within origin/native group)",
+    filename = paste0("scatter_origin_prod_vs_immig_share__", tag, ".png"),
+    point_alpha = 0.30
+  )
+}
+
+
   # (3) Field composition among immigrants: n_immig_field / cluster_size
   if (nrow(field_comp_long) > 0) {
     save_scatter(
@@ -649,6 +890,33 @@ plot_one <- function(pan, year_val, geo_name, immig_def) {
       point_alpha = 0.25
     )
   }
+
+# -------------------------
+# productivity vs immigrant share by career modal class
+# -------------------------
+if (nrow(class_prod_vs_immshare_long) > 0) {
+
+  p <- ggplot(class_prod_vs_immshare_long,
+              aes(x = immig_share, y = avg_patents, color = group, size = n_group)) +
+    geom_point(alpha = 0.30) +
+    geom_smooth(method = "lm", aes(weight = n_group), se = FALSE) +
+    facet_wrap(~ career_class, scales = "free_y") +
+    labs(
+      title = paste0("Avg patents vs immigrant share — by career modal class (",
+                     year_val, ", ", geo_name, ", ", immig_def, ")"),
+      subtitle = "Within each class: immigrant vs nonimmigrant lines. Weights & dot size = # inventors in class×group×cluster.",
+      x = "Immigrant share in cluster-year",
+      y = "Average patents per inventor-year (group mean)",
+      color = "Group"
+    ) +
+    theme_minimal() +
+    scale_size_continuous(range = c(0.8, 6), guide = "none")
+
+  ggsave(
+    file.path(PLOTS_DIR, paste0("facet_class_prod_vs_immig_share__", tag, ".png")),
+    p, width = 11.5, height = 7.2, dpi = 220
+  )
+}
 
   # (4) Tenure composition among immigrants: n_immig_bin / cluster_size
   if (nrow(tenure_comp_long) > 0) {
@@ -662,6 +930,61 @@ plot_one <- function(pan, year_val, geo_name, immig_def) {
     )
   }
 
+if (nrow(tenure_comp_long) > 0 && "log_cluster_bin" %in% names(tenure_comp_long)) {
+
+  ten_bin <- tenure_comp_long %>%
+    group_by(log_cluster_bin, tenure_bin) %>%
+    summarise(
+      share_cat = wmean(share_cat, cluster_size),
+      w = sum(cluster_size, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    filter(!is.na(share_cat))
+
+  p <- ggplot(ten_bin, aes(x = log_cluster_bin, y = share_cat, color = tenure_bin, group = tenure_bin)) +
+    geom_line() +
+    geom_point(alpha = 0.8) +
+    labs(
+      title = paste0("Tenure composition (immigrants): binned by log(cluster) (", year_val, ", ", geo_name, ", ", immig_def, ")"),
+      subtitle = "Each point is a log(cluster) bin; y is weighted mean share (weights = cluster_size).",
+      x = "log(cluster size) bins (width = 2 up to 16)",
+      y = "Share among immigrants in tenure bin",
+      color = "Tenure bin"
+    ) +
+    theme_minimal()
+
+  ggsave(file.path(PLOTS_DIR, paste0("tenure_comp__binned__", tag, ".png")), p, width = 10.2, height = 6.0, dpi = 220)
+}
+
+# Avg tenure vs cluster size (imm vs native)
+if (nrow(tenure_avg_long) > 0) {
+  save_scatter(
+    df = tenure_avg_long,
+    x = "log_cluster", y = "avg_tenure", color = "group2", w = "cluster_size",
+    title = paste0("Avg tenure by location vs log cluster size (", year_val, ", ", geo_name, ", ", immig_def, ")"),
+    xlab = "log(cluster size)",
+    ylab = "Average tenure (years)",
+    filename = paste0("scatter_avg_tenure_vs_size__", tag, ".png"),
+    point_alpha = 0.25
+  )
+}
+
+# Young productivity vs immigrant share
+
+if (nrow(young_prod_vs_immshare_long) > 0) {
+  save_scatter(
+    df = young_prod_vs_immshare_long,
+    x = "immig_share", y = "avg_patents", color = "group",
+    w = "n_group",  # <-- recommended: weight by how many young in that cluster-year
+    title = paste0("Young productivity vs immigrant share (tenure [0,10), ",
+                   year_val, ", ", geo_name, ", ", immig_def, ")"),
+    xlab = "Immigrant share in cluster-year",
+    ylab = "Avg patents per inventor-year (young group mean)",
+    filename = paste0("scatter_young_prod_vs_immig_share__", tag, ".png"),
+    point_alpha = 0.30
+  )
+}
+
   # (5)  Field based on class composition among immigrants: n_immig_field / cluster_size
 
 if (nrow(g_comp_long) > 0) {
@@ -670,7 +993,7 @@ if (nrow(g_comp_long) > 0) {
     title = paste0("Within class G: subclass composition among immigrants vs log cluster size (",
                    year_val, ", ", geo_name, ", ", immig_def, ")"),
     xlab = "log(cluster size)",
-    ylab = "Share within G-immigrants (denom = # immigrants in class G in cluster)",
+    ylab = "Share among all immigrants in cluster (denom = # immigrants in cluster)",
     filename = paste0("composition_G_subclass_vs_size__", tag, ".png"),
     point_alpha = 0.20
   )
@@ -682,7 +1005,7 @@ if (nrow(h_comp_long) > 0) {
     title = paste0("Within class H: subclass composition among immigrants vs log cluster size (",
                    year_val, ", ", geo_name, ", ", immig_def, ")"),
     xlab = "log(cluster size)",
-    ylab = "Share within H-immigrants (denom = # immigrants in class H in cluster)",
+    ylab = "Share among all immigrants in cluster (denom = # immigrants in cluster)",
     filename = paste0("composition_H_subclass_vs_size__", tag, ".png"),
     point_alpha = 0.20
   )
@@ -957,5 +1280,154 @@ save_labeled_patents_plot <- function(pat_long, xvar, year_val, geo_name, immig_
 
   invisible(NULL)
 }
+
+# ============================================================
+# TIME SERIES (using existing career_modal_section):
+# Plot1 counts: total vs GH-career vs GH-career & ever-nonGH-year
+# Plot2 immigrant shares: same categories
+# Plot3 immigrant counts: same categories
+# (NO US FILTER)
+# ============================================================
+
+cat("\n[INFO] Building time-series using career_modal_section + modal_section_y...\n")
+
+IMMIG_VAR_TS <- immig_defs[1]  # e.g. "immig_first_deg_or_job_nonUS"
+
+ds_ts <- open_dataset(INPUT, format = "parquet")
+need_cols(ds_ts, c("user_id","year","career_modal_section","modal_section_y", IMMIG_VAR_TS))
+
+ts0 <- ds_ts %>%
+  select(user_id, year, career_modal_section, modal_section_y, all_of(IMMIG_VAR_TS)) %>%
+  filter(!is.na(year),
+         !is.na(career_modal_section), career_modal_section != "",
+         !is.na(modal_section_y),      modal_section_y != "")
+
+# ------------------------------------------------------------
+# user-level: ever had a non-GH YEAR (based on modal_section_y)
+# ------------------------------------------------------------
+ever_nonGH <- ts0 %>%
+  mutate(nonGH = if_else(modal_section_y %in% c("G","H"), 0L, 1L)) %>%
+  group_by(user_id) %>%
+  summarise(ever_nonGH_year = max(nonGH, na.rm = TRUE), .groups = "drop")
+
+gh_users <- ts0 %>%
+  distinct(user_id, career_modal_section) %>%
+  filter(career_modal_section %in% c("G","H")) %>%
+  select(user_id)
+
+gh_ever_users <- gh_users %>%
+  inner_join(ever_nonGH %>% filter(ever_nonGH_year == 1L), by = "user_id") %>%
+  select(user_id)
+
+# ------------------------------------------------------------
+# Plot 1: counts by year (active inventors that year)
+# ------------------------------------------------------------
+ts_total <- ts0 %>%
+  group_by(year) %>%
+  summarise(n_total = n_distinct(user_id), .groups = "drop") %>%
+  collect()
+
+ts_GH_career <- ts0 %>%
+  inner_join(gh_users, by = "user_id") %>%
+  group_by(year) %>%
+  summarise(n_GH_career = n_distinct(user_id), .groups = "drop") %>%
+  collect()
+
+ts_GH_career_ever <- ts0 %>%
+  inner_join(gh_ever_users, by = "user_id") %>%
+  group_by(year) %>%
+  summarise(n_GH_career_ever_nonGH = n_distinct(user_id), .groups = "drop") %>%
+  collect()
+
+ts_counts <- ts_total %>%
+  full_join(ts_GH_career, by = "year") %>%
+  full_join(ts_GH_career_ever, by = "year") %>%
+  arrange(year) %>%
+  mutate(across(c(n_total, n_GH_career, n_GH_career_ever_nonGH), ~replace_na(.x, 0L)))
+
+ts_counts_long <- ts_counts %>%
+  tidyr::pivot_longer(
+    cols = c(n_total, n_GH_career, n_GH_career_ever_nonGH),
+    names_to = "series", values_to = "n"
+  ) %>%
+  mutate(series = factor(series,
+                         levels = c("n_total","n_GH_career","n_GH_career_ever_nonGH"),
+                         labels = c("Total inventors",
+                                    "Career modal in {G,H}",
+                                    "Career modal in {G,H} AND ever non-{G,H} year")))
+
+p1 <- ggplot(ts_counts_long, aes(x = year, y = n, linetype = series)) +
+  geom_line(linewidth = 1.0) +
+  labs(
+    title = "Inventors over time: total vs GH-career vs GH-career who ever patent outside GH (by modal year)",
+    x = "Year", y = "# inventors", linetype = "Series"
+  ) +
+  theme_minimal()
+
+ggsave(file.path(PLOTS_DIR, "ts_counts_total_vs_GHcareer_vs_GHcareerEverNonGH.png"),
+       p1, width = 10.5, height = 6.2, dpi = 220)
+
+# ------------------------------------------------------------
+# Plot 2 & 3: immigrant shares + immigrant counts
+# (restrict to rows where immigrant flag is defined as 0/1)
+# ------------------------------------------------------------
+ts_def <- ts0 %>% filter(.data[[IMMIG_VAR_TS]] %in% c(0L, 1L))
+
+year_imm_stats <- function(df, label) {
+
+  n_all <- df %>%
+    group_by(year) %>%
+    summarise(n = n_distinct(user_id), .groups = "drop")
+
+  n_imm <- df %>%
+    filter(.data[[IMMIG_VAR_TS]] == 1L) %>%
+    group_by(year) %>%
+    summarise(n_imm = n_distinct(user_id), .groups = "drop")
+
+  n_all %>%
+    left_join(n_imm, by = "year") %>%
+    mutate(
+      n_imm = dplyr::coalesce(n_imm, 0L),             # Arrow-safe
+      share_imm = if_else(n > 0, n_imm / n, NA_real_),
+      series = label
+    ) %>%
+    collect()
+}
+
+s_total <- year_imm_stats(ts_def, "Total inventors")
+s_GH    <- year_imm_stats(ts_def %>% inner_join(gh_users, by="user_id"), "Career modal in {G,H}")
+s_GHever<- year_imm_stats(ts_def %>% inner_join(gh_ever_users, by="user_id"), "Career modal in {G,H} AND ever non-{G,H} year")
+
+ts_share <- bind_rows(s_total, s_GH, s_GHever) %>%
+  mutate(series = factor(series,
+                         levels = c("Total inventors",
+                                    "Career modal in {G,H}",
+                                    "Career modal in {G,H} AND ever non-{G,H} year")))
+
+# Plot 2: immigrant share
+p2 <- ggplot(ts_share, aes(x = year, y = share_imm, linetype = series)) +
+  geom_line(linewidth = 1.0) +
+  labs(
+    title = paste0("Immigrant share over time by category (immig def: ", IMMIG_VAR_TS, ")"),
+    x = "Year", y = "Immigrant share", linetype = "Series"
+  ) +
+  theme_minimal()
+
+ggsave(file.path(PLOTS_DIR, paste0("ts_immig_share_total_vs_GHcareer_vs_GHcareerEverNonGH__", IMMIG_VAR_TS, ".png")),
+       p2, width = 10.5, height = 6.2, dpi = 220)
+
+# Plot 3: number of immigrants
+p3 <- ggplot(ts_share, aes(x = year, y = n_imm, linetype = series)) +
+  geom_line(linewidth = 1.0) +
+  labs(
+    title = paste0("Number of immigrants over time by category (immig def: ", IMMIG_VAR_TS, ")"),
+    x = "Year", y = "# immigrants", linetype = "Series"
+  ) +
+  theme_minimal()
+
+ggsave(file.path(PLOTS_DIR, paste0("ts_num_immigrants_total_vs_GHcareer_vs_GHcareerEverNonGH__", IMMIG_VAR_TS, ".png")),
+       p3, width = 10.5, height = 6.2, dpi = 220)
+
+cat("[INFO] Saved 3 time-series plots.\n")
 
 cat("[DONE] Plots (selected years) in:\n  ", PLOTS_DIR, "\n\n")
