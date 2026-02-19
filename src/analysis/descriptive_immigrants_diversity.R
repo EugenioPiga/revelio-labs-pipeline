@@ -535,6 +535,161 @@ metro_stats <- metro_origin_stats %>%
 
 write_csv(metro_stats, file.path(TABLES_DIR, "metro_year_diversity_origin_job_edu.csv"))
 
+
+# =========================
+# Correlate firm FE with firm diversity (2018)
+#   - raw:     firm_fe ~ div
+#   - controls firm_fe ~ div + log_cluster + immig_share
+#   - WLS weights = cluster_size (standard lm SE)
+#   - unbinned scatter + WLS line + annotation (beta, se)
+# =========================
+
+# --- packages ---
+pkgs_fe <- c("dplyr", "ggplot2", "scales", "tibble", "data.table")
+for (p in pkgs_fe) if (!requireNamespace(p, quietly = TRUE)) {
+  install.packages(p, repos = "https://cloud.r-project.org", lib = user_lib)
+}
+suppressPackageStartupMessages({
+  library(dplyr); library(ggplot2); library(scales); library(tibble); library(data.table)
+})
+
+# --- paths to PPML FE (from your PPML loop runner) ---
+FE_DIR <- "/home/epiga/revelio_labs/output/regressions/ppml_loop_runs/fe/metro_parent"
+fe_parent_path <- file.path(FE_DIR, "fe_metro_parent_first_parent_rcid.csv")
+
+# --- outputs ---
+PLOTS_FE_DIR  <- file.path(OUT_DIR, "plots_firmFE_vs_div_2018")
+TABLES_FE_DIR <- file.path(OUT_DIR, "tables_firmFE_vs_div_2018")
+dir.create(PLOTS_FE_DIR,  recursive = TRUE, showWarnings = FALSE)
+dir.create(TABLES_FE_DIR, recursive = TRUE, showWarnings = FALSE)
+
+# --- quick existence checks ---
+stopifnot(exists("firm_stats"))
+if (!file.exists(fe_parent_path)) stop(paste0("[ERROR] Missing FE file: ", fe_parent_path))
+
+need_cols_local <- function(df, cols) {
+  miss <- setdiff(cols, names(df))
+  if (length(miss) > 0) stop(paste0("[ERROR] Missing cols: ", paste(miss, collapse=", ")))
+}
+
+# --- read FE (base/data.table) ---
+fe_parent <- data.table::fread(fe_parent_path) %>%
+  transmute(parent_id = as.character(level),
+            firm_fe   = as.numeric(fe))
+
+# --- helper: WLS coef table for one reg ---
+wls_term <- function(df, fmla, term) {
+  fit <- lm(fmla, data = df, weights = cluster_size)
+  co  <- summary(fit)$coefficients
+  if (!(term %in% rownames(co))) {
+    return(tibble(beta=NA_real_, se=NA_real_, t=NA_real_, p=NA_real_, n=nrow(df)))
+  }
+  tibble(
+    beta = unname(co[term, "Estimate"]),
+    se   = unname(co[term, "Std. Error"]),
+    t    = unname(co[term, "t value"]),
+    p    = unname(co[term, "Pr(>|t|)"]),
+    n    = nrow(df)
+  )
+}
+
+sig_stars <- function(p) {
+  ifelse(!is.finite(p), "",
+         ifelse(p < 0.01, "***",
+                ifelse(p < 0.05, "**",
+                       ifelse(p < 0.1, "*", ""))))
+}
+
+fmt_bse <- function(b, se) {
+  if (!is.finite(b) || !is.finite(se)) return("NA")
+  paste0(sprintf("%.3f", b), " (", sprintf("%.3f", se), ")")
+}
+
+# --- build firm-year dataset for 2018 + merge FE ---
+need_cols_local(firm_stats, c("cluster_id","year","cluster_size","log_cluster","immig_share",
+                             "origin_div","job_div","edu_div"))
+
+firm_2018 <- firm_stats %>%
+  filter(year == 2018) %>%
+  mutate(parent_id = as.character(cluster_id)) %>%
+  left_join(fe_parent, by = "parent_id") %>%
+  filter(!is.na(firm_fe)) %>%
+  transmute(
+    parent_id,
+    cluster_size = as.numeric(cluster_size),
+    log_cluster  = as.numeric(log_cluster),
+    immig_share  = as.numeric(immig_share),
+    origin_div   = as.numeric(origin_div),
+    job_div      = as.numeric(job_div),
+    edu_div      = as.numeric(edu_div),
+    firm_fe      = as.numeric(firm_fe)
+  ) %>%
+  filter(is.finite(cluster_size), cluster_size > 0,
+         is.finite(log_cluster), is.finite(immig_share),
+         is.finite(firm_fe))
+
+# --- main loop over diversity measures ---
+measures <- c("origin_div", "job_div", "edu_div")
+rows <- list()
+
+for (m in measures) {
+
+  dd <- firm_2018 %>%
+    filter(is.finite(.data[[m]]))
+
+  if (nrow(dd) < 50) next
+
+  # regressions
+  raw  <- wls_term(dd, as.formula(paste0("firm_fe ~ ", m)), m)
+  ctrl <- wls_term(dd, as.formula(paste0("firm_fe ~ ", m, " + log_cluster + immig_share")), m)
+
+  raw  <- raw  %>% mutate(measure = m, spec = "raw",      stars = sig_stars(p))
+  ctrl <- ctrl %>% mutate(measure = m, spec = "controls", stars = sig_stars(p))
+
+  rows[[paste0(m,"_raw")]]  <- raw
+  rows[[paste0(m,"_ctrl")]] <- ctrl
+
+  # plotting: unbinned scatter + WLS line (raw), annotate raw+ctrl slope
+  note <- paste0(
+    "WLS (w=cluster_size)\n",
+    "Raw:   β=", fmt_bse(raw$beta, raw$se), " ", raw$stars, "\n",
+    "Ctrls: β=", fmt_bse(ctrl$beta, ctrl$se), " ", ctrl$stars
+  )
+
+  p <- ggplot(dd, aes(x = .data[[m]], y = firm_fe)) +
+    geom_point(aes(size = cluster_size), alpha = 0.18) +
+    geom_smooth(aes(weight = cluster_size), method = "lm", se = FALSE) +
+    scale_size_continuous(labels = comma, guide = "none") +
+    labs(
+      title = paste0("2018 Firm FE vs ", m, " (WLS, w=cluster_size)"),
+      x = m,
+      y = "Firm fixed effect (PPML, metro_parent)"
+    ) +
+    annotate("text", x = Inf, y = -Inf, label = note,
+             hjust = 1.02, vjust = -0.2, size = 3.3) +
+    theme_minimal(base_size = 12)
+
+  ggsave(
+    filename = file.path(PLOTS_FE_DIR, paste0("FIRMFE_vs_", m, "__2018.png")),
+    plot = p, width = 8.5, height = 5.8, dpi = 180
+  )
+}
+
+res_fe_corr_2018 <- bind_rows(rows) %>%
+  select(measure, spec, n, beta, se, t, p, stars) %>%
+  arrange(measure, spec)
+
+data.table::fwrite(
+  res_fe_corr_2018,
+  file.path(TABLES_FE_DIR, "FIRMFE_corr_diversity__2018.csv")
+)
+
+cat("\n[DONE] FE-correlation outputs\n")
+cat("Plots: ", PLOTS_FE_DIR, "\n")
+cat("Table: ", file.path(TABLES_FE_DIR, "FIRMFE_corr_diversity__2018.csv"), "\n\n")
+print(res_fe_corr_2018)
+
+
 # =========================
 # Merge back to inventor-year (explicit cluster_id columns)
 # =========================
