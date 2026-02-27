@@ -45,6 +45,8 @@ PARENT_VAR <- "first_parent_rcid"
 YEAR_START <- 2010
 YEAR_END   <- 2024
 
+US_COUNTRY <- "United States"
+
 LAST10_N <- 10
 LAST10_START <- YEAR_END - LAST10_N + 1
 LAST10_END   <- YEAR_END
@@ -249,7 +251,7 @@ first_pos_tbl <- ds_pos %>%
 ts_msg("Collecting 2010–2024...")
 df <- ds %>%
   filter(year >= YEAR_START, year <= YEAR_END) %>%
-  select(user_id, year, n_patents,
+  select(user_id, year, n_patents, first_country,
          first_university_country, first_startdate_edu, first_startdate_pos,
          !!sym(IMMIG_VAR), !!sym(PARENT_VAR)) %>%
   collect() %>%
@@ -257,6 +259,7 @@ df <- ds %>%
     user_id = as.character(user_id),
     year = as.integer(year),
     n_patents = as.numeric(n_patents),
+    first_country = str_trim(as.character(first_country)),
     !!IMMIG_VAR := as.integer(.data[[IMMIG_VAR]]),
     !!PARENT_VAR := as.character(.data[[PARENT_VAR]]),
     first_university_country = str_trim(as.character(first_university_country))
@@ -270,6 +273,7 @@ df <- df %>% compute_tenure() %>% filter(!is.na(tenure)) %>% make_origin_country
 # 6) origin_group (topK among immigrants, plus US, else OTHER)
 # =========================
 ts_msg("Building origin_group (topK + US + OTHER) ...")
+df <- df %>% filter(!is.na(first_country), first_country == US_COUNTRY)
 df10 <- df %>% filter(year %in% YEARS_LAST10)
 
 top_orig <- df10 %>%

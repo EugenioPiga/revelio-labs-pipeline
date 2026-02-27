@@ -49,6 +49,8 @@ PARENT_VAR <- "first_parent_rcid"
 YEAR_START <- 2010
 YEAR_END   <- 2024
 
+US_COUNTRY <- "United States"
+
 TOPK_ORIGINS <- 30
 INCLUDE_MISSING_AS_CATEGORY <- FALSE
 
@@ -367,7 +369,7 @@ ts_msg("Filtering years:", YEAR_START, "to", YEAR_END)
 df <- ds %>%
   filter(year >= YEAR_START, year <= YEAR_END) %>%
   select(
-    user_id, year, n_patents,
+    user_id, year, n_patents, first_country,
     first_university_country,
     first_startdate_edu, first_startdate_pos,
     !!sym(IMMIG_VAR), !!sym(PARENT_VAR)
@@ -377,11 +379,15 @@ df <- ds %>%
     user_id = as.character(user_id),
     year = as.integer(year),
     n_patents = as.numeric(n_patents),
+    first_country = str_trim(as.character(first_country)),
     !!IMMIG_VAR := as.integer(.data[[IMMIG_VAR]]),
     first_university_country = str_trim(as.character(first_university_country)),
     !!PARENT_VAR := as.character(.data[[PARENT_VAR]])
   ) %>%
   left_join(first_pos_tbl, by = "user_id")
+
+df <- df %>%
+  filter(!is.na(first_country), first_country == US_COUNTRY)
 
 ts_msg("Deriving tenure + origin_country...")
 df <- df %>%
@@ -441,7 +447,7 @@ run_models_parent_code1 <- function(df_all, cluster_var, label, meas_obj) {
     div_imm <- HR[[spec_nm]][["imm"]]
 
     # base RHS + horserace (all + nat + imm jointly)
-    RHS_base <- paste0(div_all, " + ", div_nat, " + ", div_imm, " + cluster_size_10y + tenure + tenure_sq")
+    RHS_base <- paste0(div_all, " + cluster_size_10y + tenure + tenure_sq")
 
     dspec <- dd %>% filter(is.finite(.data[[div_all]]), is.finite(cluster_size_10y), is.finite(immig_share_10y))
     ts_msg("Spec:", spec_nm, "| Stage A N =", nrow(dspec))
@@ -503,7 +509,7 @@ run_models_parent_code1 <- function(df_all, cluster_var, label, meas_obj) {
     div_nat <- HR[[spec_nm]][["nat"]]
     div_imm <- HR[[spec_nm]][["imm"]]
 
-    RHS_base <- paste0(div_all, " + ", div_nat, " + ", div_imm, " + cluster_size_10y + tenure + tenure_sq")
+    RHS_base <- paste0(div_all, " + cluster_size_10y + tenure + tenure_sq")
 
     dspec <- dd %>% filter(is.finite(.data[[div_all]]), is.finite(cluster_size_10y), is.finite(immig_share_10y))
     if (nrow(dspec) == 0) next

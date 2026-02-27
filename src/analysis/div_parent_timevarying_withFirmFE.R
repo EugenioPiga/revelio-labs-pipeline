@@ -47,6 +47,8 @@ FIRM_VAR_CANDIDATE <- "first_rcid"  # optional for "firm FE"
 YEAR_START <- 2010
 YEAR_END   <- 2024
 
+US_COUNTRY <- "United States"
+
 TOPK_ORIGINS <- 30
 INCLUDE_MISSING_AS_CATEGORY <- FALSE
 
@@ -305,7 +307,7 @@ first_pos_tbl <- ds_pos %>%
   distinct(user_id, .keep_all = TRUE)
 
 ts_msg("Collecting regression window 2010–2024...")
-sel <- c("user_id","year","n_patents","first_university_country","first_startdate_edu","first_startdate_pos",IMMIG_VAR,PARENT_VAR)
+sel <- c("user_id","year","n_patents","first_country","first_university_country","first_startdate_edu","first_startdate_pos",IMMIG_VAR,PARENT_VAR)
 if (has_firm) sel <- c(sel, FIRM_VAR_CANDIDATE)
 
 df <- ds %>%
@@ -316,11 +318,14 @@ df <- ds %>%
     user_id = as.character(user_id),
     year = as.integer(year),
     n_patents = as.numeric(n_patents),
+    first_country = str_trim(as.character(first_country)),
     !!IMMIG_VAR := as.integer(.data[[IMMIG_VAR]]),
     first_university_country = str_trim(as.character(first_university_country)),
     !!PARENT_VAR := as.character(.data[[PARENT_VAR]])
   ) %>%
   left_join(first_pos_tbl, by="user_id")
+
+df <- df %>% filter(!is.na(first_country), first_country == US_COUNTRY)
 
 if (has_firm) {
   df <- df %>% mutate(!!FIRM_VAR_CANDIDATE := as.character(.data[[FIRM_VAR_CANDIDATE]]))
