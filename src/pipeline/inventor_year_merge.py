@@ -328,7 +328,7 @@ pos_year = (
 # --- (B) Forward-fill to make continuous inventor-year panel ---
 print("[INFO] Expanding to continuous inventor-year panel and forward-filling attributes...")
 
-# 1️⃣ Deduplicate first to ensure unique (user_id, year)
+# Deduplicate first to ensure unique (user_id, year)
 print("[DEBUG] Deduplicating per (user_id, year) before forward fill...")
 pos_year = (
     pos_year
@@ -343,7 +343,7 @@ check_dupes(pos_year, "After POS yearly aggregation")
 # Add an "observed” marker to pos_year
 pos_year = pos_year.withColumn("pos_obs", F.lit(1))
 
-# 2️⃣ Compute global maximum year across patents + positions
+# Compute global maximum year across patents + positions
 pat_with_year = pat.withColumn("year", F.year("filing_date"))
 max_pat_year = pat_with_year.select(F.max("year")).collect()[0][0]
 max_pos_year = pos_year.select(F.max("year")).collect()[0][0]

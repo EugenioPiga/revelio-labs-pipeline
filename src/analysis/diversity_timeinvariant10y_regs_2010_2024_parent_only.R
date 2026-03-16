@@ -1,13 +1,15 @@
 ##############################################################################
 # TIME-INVARIANT (LAST-10Y) DIVERSITY + SIZE — PARENT ONLY — NO RDS
-# Adds HORSE RACE:
-#   - overall diversity (all inventors)
-#   - native-only diversity
-#   - immigrant-only diversity
+#
+#   - Compute cluster measures on FULL panel (incl. abroad years),
+#     then filter regression sample to US inventor-years only:
+#       first_country == "United States"
+#   - Run both UNWEIGHTED and WEIGHTED regressions:
+#       weights = cluster_size_10y
 #
 # Models (spec ∈ {origin, job, edu}):
-#   Stage A (run + SAVE first): base / imm / imm2
-#   Stage B (slow): imm_shares (topK + OTHER)
+#   Stage A: base / imm / imm2
+#   Stage B: imm_shares (topK + OTHER)
 ##############################################################################
 
 # =========================
@@ -103,7 +105,7 @@ safe_name <- function(x) {
 }
 
 # =========================
-# 3) Derived variables
+# 3) Derived variables (row-level)
 # =========================
 compute_tenure <- function(df) {
   df %>%
@@ -122,10 +124,10 @@ make_origin_country <- function(df) {
     mutate(
       uni_c  = str_trim(as.character(first_university_country)),
       pos_c  = str_trim(as.character(first_pos_country)),
-      uni_ok = !is.na(uni_c) & uni_c != "" & uni_c != "United States",
-      pos_ok = !is.na(pos_c) & pos_c != "" & pos_c != "United States",
+      uni_ok = !is.na(uni_c) & uni_c != "" & uni_c != US_COUNTRY,
+      pos_ok = !is.na(pos_c) & pos_c != "" & pos_c != US_COUNTRY,
       origin_country = case_when(
-        .data[[IMMIG_VAR]] == 0L ~ "United States",
+        .data[[IMMIG_VAR]] == 0L ~ US_COUNTRY,
         .data[[IMMIG_VAR]] == 1L & uni_ok ~ uni_c,
         .data[[IMMIG_VAR]] == 1L & !uni_ok & pos_ok ~ pos_c,
         TRUE ~ NA_character_
@@ -134,7 +136,7 @@ make_origin_country <- function(df) {
 }
 
 # =========================
-# 4) Composition shares (time-invariant, last10)
+# 4) Composition shares (time-invariant, last10)  [Stage B controls]
 # =========================
 build_comp_dt <- function(df, cluster_var, country_var) {
   keep <- c("user_id","year", IMMIG_VAR, cluster_var, country_var)
@@ -199,9 +201,9 @@ cluster_const_composition_last10 <- function(df10, cluster_var, country_var, pre
 }
 
 # =========================
-# 5) Diversity: overall + natives-only + immigrants-only (cluster-year)
+# 5) Diversity: OVERALL only (cluster-year)
 # =========================
-cluster_year_div_by_group <- function(df, cluster_var, country_var, div_prefix, min_cluster = MIN_CLUSTER) {
+cluster_year_div_overall <- function(df, cluster_var, country_var, div_prefix, min_cluster = MIN_CLUSTER) {
 
   keep <- c("user_id","year",IMMIG_VAR,cluster_var,country_var)
   dt <- as.data.table(df[, keep])
@@ -217,50 +219,40 @@ cluster_year_div_by_group <- function(df, cluster_var, country_var, div_prefix, 
   dt[, imm := as.integer(get(IMMIG_VAR))]
 
   comp <- unique(dt[, .(user_id, year, cluster_id, imm, cvar_raw)])
-  size_df <- comp[, .(cluster_size = uniqueN(user_id), immig_share = mean(imm, na.rm = TRUE)),
+
+  # cluster-year size + immigrant share (computed on panel provided)
+  size_df <- comp[, .(cluster_size = uniqueN(user_id),
+                      immig_share = mean(imm, na.rm = TRUE)),
                   by = .(cluster_id, year)]
   size_df <- size_df[cluster_size >= min_cluster]
 
-  div_one <- function(xdt) {
-    xdt <- xdt[!is.na(cvar_raw) & cvar_raw != "" & cvar_raw != "empty"]
-    if (nrow(xdt) == 0) return(NULL)
-    tmp <- xdt[, .(n = uniqueN(user_id)), by = .(cluster_id, year, v = cvar_raw)]
-    tmp[, tot := sum(n), by = .(cluster_id, year)]
-    tmp[, share_sq := (n / tot)^2]
-    out <- tmp[, .(div = 1 - sum(share_sq)), by = .(cluster_id, year)]
-    out
+  # diversity (1 - HHI) on all inventors (overall)
+  xdt <- comp[!is.na(cvar_raw) & cvar_raw != "" & cvar_raw != "empty"]
+  if (nrow(xdt) == 0) {
+    out <- size_df
+    out[, paste0(div_prefix, "_div_all") := NA_real_]
+    return(as_tibble(out))
   }
 
-  div_all <- div_one(comp)
-  div_nat <- div_one(comp[imm == 0L])
-  div_imm <- div_one(comp[imm == 1L])
+  tmp <- xdt[, .(n = uniqueN(user_id)), by = .(cluster_id, year, v = cvar_raw)]
+  tmp[, tot := sum(n), by = .(cluster_id, year)]
+  tmp[, share_sq := (n / tot)^2]
+  div_df <- tmp[, .(div = 1 - sum(share_sq)), by = .(cluster_id, year)]
+  setnames(div_df, "div", paste0(div_prefix, "_div_all"))
 
-  out <- merge(size_df, div_all, by = c("cluster_id","year"), all.x = TRUE)
-  setnames(out, "div", paste0(div_prefix, "_div_all"))
-
-  if (!is.null(div_nat)) {
-    out <- merge(out, div_nat, by = c("cluster_id","year"), all.x = TRUE)
-    setnames(out, "div", paste0(div_prefix, "_div_nat"))
-  } else out[, paste0(div_prefix, "_div_nat") := NA_real_]
-
-  if (!is.null(div_imm)) {
-    out <- merge(out, div_imm, by = c("cluster_id","year"), all.x = TRUE)
-    setnames(out, "div", paste0(div_prefix, "_div_imm"))
-  } else out[, paste0(div_prefix, "_div_imm") := NA_real_]
-
+  out <- merge(size_df, div_df, by = c("cluster_id","year"), all.x = TRUE)
   as_tibble(out)
 }
 
-compute_cluster_bundle_horserace <- function(df10, cluster_var) {
-  ts_msg("Computing PARENT cluster-year diversity (overall/native/immigrant) ...")
+compute_cluster_bundle_overall <- function(df10, cluster_var) {
+  ts_msg("Computing PARENT cluster-year diversity (OVERALL only) ...")
 
-  # origin
-  origin <- cluster_year_div_by_group(df10, cluster_var, "origin_country", "origin", MIN_CLUSTER)
-  # job
-  job    <- cluster_year_div_by_group(df10, cluster_var, "first_pos_country", "job", MIN_CLUSTER) %>%
+  origin <- cluster_year_div_overall(df10, cluster_var, "origin_country", "origin", MIN_CLUSTER)
+
+  job <- cluster_year_div_overall(df10, cluster_var, "first_pos_country", "job", MIN_CLUSTER) %>%
     select(cluster_id, year, starts_with("job_"))
-  # edu
-  edu    <- cluster_year_div_by_group(df10, cluster_var, "first_university_country", "edu", MIN_CLUSTER) %>%
+
+  edu <- cluster_year_div_overall(df10, cluster_var, "first_university_country", "edu", MIN_CLUSTER) %>%
     select(cluster_id, year, starts_with("edu_"))
 
   origin %>%
@@ -268,35 +260,24 @@ compute_cluster_bundle_horserace <- function(df10, cluster_var) {
     left_join(edu, by = c("cluster_id","year"))
 }
 
-make_timeinvariant_measures_horserace <- function(df_all, cluster_var, label) {
-  ts_msg("Building time-invariant (last10y) measures for:", label)
-  df10 <- df_all %>% filter(year %in% YEARS_LAST10)
+make_timeinvariant_measures_overall <- function(df_all_fullpanel, cluster_var, label) {
+  ts_msg("Building time-invariant (last10y) measures for:", label, "(FULL PANEL)")
 
-  stats_y <- compute_cluster_bundle_horserace(df10, cluster_var)
+  df10 <- df_all_fullpanel %>% filter(year %in% YEARS_LAST10)
+
+  stats_y <- compute_cluster_bundle_overall(df10, cluster_var)
   write_csv(stats_y, file.path(DIRS$cluster_meas, paste0(label, "__cluster_year__", LAST10_START, "_", LAST10_END, ".csv")))
 
   # collapse to cluster constants
   stats_c <- stats_y %>%
     group_by(cluster_id) %>%
     summarise(
-      # size + imm share (from stats_y)
       cluster_size_10y = mean(cluster_size, na.rm = TRUE),
       immig_share_10y  = mean(immig_share, na.rm = TRUE),
 
-      # overall div
       origin_div_10y = mean(origin_div_all, na.rm = TRUE),
       job_div_10y    = mean(job_div_all, na.rm = TRUE),
       edu_div_10y    = mean(edu_div_all, na.rm = TRUE),
-
-      # native div
-      origin_div_nat_10y = mean(origin_div_nat, na.rm = TRUE),
-      job_div_nat_10y    = mean(job_div_nat, na.rm = TRUE),
-      edu_div_nat_10y    = mean(edu_div_nat, na.rm = TRUE),
-
-      # immigrant div
-      origin_div_imm_10y = mean(origin_div_imm, na.rm = TRUE),
-      job_div_imm_10y    = mean(job_div_imm, na.rm = TRUE),
-      edu_div_imm_10y    = mean(edu_div_imm, na.rm = TRUE),
 
       years_used_10y = dplyr::n(),
       .groups = "drop"
@@ -314,8 +295,8 @@ make_timeinvariant_measures_horserace <- function(df_all, cluster_var, label) {
 
   write_csv(stats_c, file.path(DIRS$cluster_meas, paste0(label, "__cluster_const__", LAST10_START, "_", LAST10_END, ".csv")))
 
-  # shares controls (for Stage B)
-  ts_msg("Computing time-invariant origin-share controls (last10y) for:", label)
+  # shares controls (Stage B)
+  ts_msg("Computing time-invariant share controls (last10y) for:", label, "(FULL PANEL)")
   shares_origin <- cluster_const_composition_last10(df10, cluster_var, "origin_country", "origin", TOPK_ORIGINS)
   shares_job    <- cluster_const_composition_last10(df10, cluster_var, "first_pos_country", "job", TOPK_ORIGINS)
   shares_edu    <- cluster_const_composition_last10(df10, cluster_var, "first_university_country", "edu", TOPK_ORIGINS)
@@ -328,7 +309,7 @@ make_timeinvariant_measures_horserace <- function(df_all, cluster_var, label) {
 }
 
 # =========================
-# 6) Load Arrow + build df
+# 6) Load Arrow + build df (FULL PANEL first)
 # =========================
 ts_msg("Opening Arrow dataset...")
 ds <- open_dataset(INPUT, format = "parquet")
@@ -341,7 +322,7 @@ need_cols(names(ds), c(
   IMMIG_VAR, PARENT_VAR
 ))
 
-# first_pos_country on FULL panel
+# first_pos_country computed from FULL panel
 ts_msg("Computing first_pos_country from FULL panel (before year filtering)...")
 ds_pos <- ds %>%
   select(user_id, year, first_country, last_country) %>%
@@ -360,13 +341,15 @@ first_pos_tbl <- ds_pos %>%
   filter(year == first_pos_year) %>%
   select(user_id, first_pos_country = pos_country_y) %>%
   collect() %>%
-  mutate(user_id = as.character(user_id),
-         first_pos_country = str_trim(as.character(first_pos_country))) %>%
+  mutate(
+    user_id = as.character(user_id),
+    first_pos_country = str_trim(as.character(first_pos_country))
+  ) %>%
   distinct(user_id, .keep_all = TRUE)
 
-# collect regression window
-ts_msg("Filtering years:", YEAR_START, "to", YEAR_END)
-df <- ds %>%
+# Collect FULL PANEL in regression window (NO US FILTER HERE)
+ts_msg("Collecting FULL PANEL years:", YEAR_START, "to", YEAR_END, "(NO US FILTER)")
+df_full <- ds %>%
   filter(year >= YEAR_START, year <= YEAR_END) %>%
   select(
     user_id, year, n_patents, first_country,
@@ -386,37 +369,40 @@ df <- ds %>%
   ) %>%
   left_join(first_pos_tbl, by = "user_id")
 
-df <- df %>%
-  filter(!is.na(first_country), first_country == US_COUNTRY)
-
-ts_msg("Deriving tenure + origin_country...")
-df <- df %>%
-  compute_tenure() %>%
-  filter(!is.na(tenure)) %>%
-  make_origin_country()
+# Derive origin_country + tenure on FULL PANEL (still no US filter)
+ts_msg("Deriving origin_country + tenure on FULL PANEL...")
+df_full <- df_full %>%
+  make_origin_country() %>%
+  compute_tenure()
 
 # =========================
-# 7) Build time-invariant measures (PARENT only)
+# 7) Build time-invariant measures on FULL PANEL (incl abroad years)
 # =========================
 ts_msg("Last-10y window is:", LAST10_START, "-", LAST10_END)
-meas_parent <- make_timeinvariant_measures_horserace(df, PARENT_VAR, "PARENT")
+meas_parent <- make_timeinvariant_measures_overall(df_full, PARENT_VAR, "PARENT")
 
 # =========================
-# 8) Run models
+# 8) Run models on US inventor-years ONLY (first_country == US)
 # =========================
-run_models_parent_code1 <- function(df_all, cluster_var, label, meas_obj) {
+run_models_parent_code1 <- function(df_fullpanel, cluster_var, label, meas_obj) {
   ts_msg("=== RUNNING MODELS FOR:", label, "===")
 
   meas_const  <- meas_obj$const
   meas_shares <- meas_obj$shares
 
-  dd <- df_all %>%
+  # Regression sample: US inventor-years only
+  ts_msg("Applying regression-only filter: first_country == US_COUNTRY")
+  df_us <- df_fullpanel %>% filter(!is.na(first_country), first_country == US_COUNTRY)
+
+  dd <- df_us %>%
     mutate(cluster_id = as.character(.data[[cluster_var]])) %>%
-    filter(!is.na(cluster_id), cluster_id != "",
-           !is.na(user_id), user_id != "",
-           !is.na(year), year >= YEAR_START, year <= YEAR_END,
-           !is.na(n_patents), n_patents >= 0,
-           is.finite(tenure), is.finite(tenure_sq)) %>%
+    filter(
+      !is.na(cluster_id), cluster_id != "",
+      !is.na(user_id), user_id != "",
+      !is.na(year), year >= YEAR_START, year <= YEAR_END,
+      !is.na(n_patents), n_patents >= 0,
+      is.finite(tenure), is.finite(tenure_sq)
+    ) %>%
     left_join(meas_const, by = "cluster_id") %>%
     mutate(
       user_id    = as.factor(user_id),
@@ -424,14 +410,13 @@ run_models_parent_code1 <- function(df_all, cluster_var, label, meas_obj) {
       cluster_id = as.factor(cluster_id)
     )
 
-  # Main diversity variables (overall)
+  # Diversity variables (overall only)
   SPECS <- list(origin = "origin_div_10y", edu = "edu_div_10y", job = "job_div_10y")
 
-  # Horse race vars (native + immigrant)
-  HR <- list(
-    origin = c(all = "origin_div_10y", nat = "origin_div_nat_10y", imm = "origin_div_imm_10y"),
-    edu    = c(all = "edu_div_10y",    nat = "edu_div_nat_10y",    imm = "edu_div_imm_10y"),
-    job    = c(all = "job_div_10y",    nat = "job_div_nat_10y",    imm = "job_div_imm_10y")
+  # Weighting options: run both
+  WEIGHTS <- list(
+    unweighted = NULL,
+    weighted   = ~ cluster_size_10y
   )
 
   all_tabs <- list()
@@ -442,14 +427,17 @@ run_models_parent_code1 <- function(df_all, cluster_var, label, meas_obj) {
   ts_msg("Stage A (base/imm/imm2) starting for:", label)
 
   for (spec_nm in names(SPECS)) {
-    div_all <- HR[[spec_nm]][["all"]]
-    div_nat <- HR[[spec_nm]][["nat"]]
-    div_imm <- HR[[spec_nm]][["imm"]]
+    div_var <- SPECS[[spec_nm]]
 
-    # base RHS + horserace (all + nat + imm jointly)
-    RHS_base <- paste0(div_all, " + cluster_size_10y + tenure + tenure_sq")
+    RHS_base <- paste0(div_var, " + cluster_size_10y + tenure + tenure_sq")
 
-    dspec <- dd %>% filter(is.finite(.data[[div_all]]), is.finite(cluster_size_10y), is.finite(immig_share_10y))
+    dspec <- dd %>%
+      filter(
+        is.finite(.data[[div_var]]),
+        is.finite(cluster_size_10y),
+        is.finite(immig_share_10y)
+      )
+
     ts_msg("Spec:", spec_nm, "| Stage A N =", nrow(dspec))
     if (nrow(dspec) == 0) next
 
@@ -461,38 +449,47 @@ run_models_parent_code1 <- function(df_all, cluster_var, label, meas_obj) {
 
     for (ctrl_tag in names(CONTROL_A)) {
       rhs <- CONTROL_A[[ctrl_tag]]
-      ts_msg("  ->", spec_nm, "|", ctrl_tag, "| N =", nrow(dspec))
 
-      # PPML/OLS with and without inventor FE
-      m_ppml_fe <- fixest::fepois(
-        as.formula(paste0("n_patents ~ ", rhs, " | user_id + year_fe")),
-        data = dspec, vcov = ~cluster_id, notes = FALSE, warn = FALSE
-      )
-      m_ppml_nofe <- fixest::fepois(
-        as.formula(paste0("n_patents ~ ", rhs, " | year_fe")),
-        data = dspec, vcov = ~cluster_id, notes = FALSE, warn = FALSE
-      )
-      m_ols_fe <- fixest::feols(
-        as.formula(paste0("n_patents ~ ", rhs, " | user_id + year_fe")),
-        data = dspec, vcov = ~cluster_id, notes = FALSE, warn = FALSE
-      )
-      m_ols_nofe <- fixest::feols(
-        as.formula(paste0("n_patents ~ ", rhs, " | year_fe")),
-        data = dspec, vcov = ~cluster_id, notes = FALSE, warn = FALSE
-      )
+      for (wtag in names(WEIGHTS)) {
+        wform <- WEIGHTS[[wtag]]
+        ts_msg("  ->", spec_nm, "|", ctrl_tag, "|", wtag, "| N =", nrow(dspec))
 
-      tab <- bind_rows(
-        extract_fixest_terms(m_ppml_fe,   paste0(label, "__", spec_nm, "__", ctrl_tag, "__PPML_inventorFE")),
-        extract_fixest_terms(m_ppml_nofe, paste0(label, "__", spec_nm, "__", ctrl_tag, "__PPML_noInventorFE")),
-        extract_fixest_terms(m_ols_fe,    paste0(label, "__", spec_nm, "__", ctrl_tag, "__OLS_inventorFE")),
-        extract_fixest_terms(m_ols_nofe,  paste0(label, "__", spec_nm, "__", ctrl_tag, "__OLS_noInventorFE"))
-      ) %>%
-        mutate(cluster_level = label, spec = spec_nm, controls = ctrl_tag, n_obs = nrow(dspec))
+        m_ppml_fe <- fixest::fepois(
+          as.formula(paste0("n_patents ~ ", rhs, " | user_id + year_fe")),
+          data = dspec, vcov = ~cluster_id, weights = wform, notes = FALSE, warn = FALSE
+        )
+        m_ppml_nofe <- fixest::fepois(
+          as.formula(paste0("n_patents ~ ", rhs, " | year_fe")),
+          data = dspec, vcov = ~cluster_id, weights = wform, notes = FALSE, warn = FALSE
+        )
+        m_ols_fe <- fixest::feols(
+          as.formula(paste0("n_patents ~ ", rhs, " | user_id + year_fe")),
+          data = dspec, vcov = ~cluster_id, weights = wform, notes = FALSE, warn = FALSE
+        )
+        m_ols_nofe <- fixest::feols(
+          as.formula(paste0("n_patents ~ ", rhs, " | year_fe")),
+          data = dspec, vcov = ~cluster_id, weights = wform, notes = FALSE, warn = FALSE
+        )
 
-      all_tabs[[paste0(spec_nm, "__", ctrl_tag)]] <- tab
+        tab <- bind_rows(
+          extract_fixest_terms(m_ppml_fe,   paste0(label, "__", spec_nm, "__", ctrl_tag, "__", wtag, "__PPML_inventorFE")),
+          extract_fixest_terms(m_ppml_nofe, paste0(label, "__", spec_nm, "__", ctrl_tag, "__", wtag, "__PPML_noInventorFE")),
+          extract_fixest_terms(m_ols_fe,    paste0(label, "__", spec_nm, "__", ctrl_tag, "__", wtag, "__OLS_inventorFE")),
+          extract_fixest_terms(m_ols_nofe,  paste0(label, "__", spec_nm, "__", ctrl_tag, "__", wtag, "__OLS_noInventorFE"))
+        ) %>%
+          mutate(
+            cluster_level = label,
+            spec = spec_nm,
+            controls = ctrl_tag,
+            weight = wtag,
+            n_obs = nrow(dspec)
+          )
+
+        all_tabs[[paste0(spec_nm, "__", ctrl_tag, "__", wtag)]] <- tab
+      }
+
+      write_csv(bind_rows(all_tabs), file.path(DIRS$tables, paste0(label, "__coef_table_PROGRESS.csv")))
     }
-
-    write_csv(bind_rows(all_tabs), file.path(DIRS$tables, paste0(label, "__coef_table_PROGRESS.csv")))
   }
 
   tab_stageA <- bind_rows(all_tabs)
@@ -505,13 +502,15 @@ run_models_parent_code1 <- function(df_all, cluster_var, label, meas_obj) {
   ts_msg("Stage B (imm_shares) starting for:", label, "(may be slow)")
 
   for (spec_nm in names(SPECS)) {
-    div_all <- HR[[spec_nm]][["all"]]
-    div_nat <- HR[[spec_nm]][["nat"]]
-    div_imm <- HR[[spec_nm]][["imm"]]
+    div_var <- SPECS[[spec_nm]]
+    RHS_base <- paste0(div_var, " + cluster_size_10y + tenure + tenure_sq")
 
-    RHS_base <- paste0(div_all, " + cluster_size_10y + tenure + tenure_sq")
-
-    dspec <- dd %>% filter(is.finite(.data[[div_all]]), is.finite(cluster_size_10y), is.finite(immig_share_10y))
+    dspec <- dd %>%
+      filter(
+        is.finite(.data[[div_var]]),
+        is.finite(cluster_size_10y),
+        is.finite(immig_share_10y)
+      )
     if (nrow(dspec) == 0) next
 
     shares_tbl <- meas_shares[[spec_nm]]
@@ -527,6 +526,7 @@ run_models_parent_code1 <- function(df_all, cluster_var, label, meas_obj) {
       dspec_s <- dspec_s %>% mutate(across(all_of(share_cols), ~ ifelse(is.na(.x), 0, .x)))
     }
 
+    # drop last share col to avoid collinearity (baseline share = omitted category)
     share_cols_use <- if (length(share_cols) >= 2) share_cols[-length(share_cols)] else share_cols
 
     rhs_shares <- paste0(
@@ -535,42 +535,53 @@ run_models_parent_code1 <- function(df_all, cluster_var, label, meas_obj) {
     )
 
     ctrl_tag <- "imm_shares"
-    ts_msg("  ->", spec_nm, "|", ctrl_tag, "| N =", nrow(dspec_s), "| #share controls =", length(share_cols_use))
 
-    m_ppml_fe <- fixest::fepois(
-      as.formula(paste0("n_patents ~ ", rhs_shares, " | user_id + year_fe")),
-      data = dspec_s, vcov = ~cluster_id, notes = FALSE, warn = FALSE
-    )
-    m_ppml_nofe <- fixest::fepois(
-      as.formula(paste0("n_patents ~ ", rhs_shares, " | year_fe")),
-      data = dspec_s, vcov = ~cluster_id, notes = FALSE, warn = FALSE
-    )
-    m_ols_fe <- fixest::feols(
-      as.formula(paste0("n_patents ~ ", rhs_shares, " | user_id + year_fe")),
-      data = dspec_s, vcov = ~cluster_id, notes = FALSE, warn = FALSE
-    )
-    m_ols_nofe <- fixest::feols(
-      as.formula(paste0("n_patents ~ ", rhs_shares, " | year_fe")),
-      data = dspec_s, vcov = ~cluster_id, notes = FALSE, warn = FALSE
-    )
+    for (wtag in names(WEIGHTS)) {
+      wform <- WEIGHTS[[wtag]]
+      ts_msg("  ->", spec_nm, "|", ctrl_tag, "|", wtag,
+             "| N =", nrow(dspec_s), "| #share controls =", length(share_cols_use))
 
-    tab <- bind_rows(
-      extract_fixest_terms(m_ppml_fe,   paste0(label, "__", spec_nm, "__", ctrl_tag, "__PPML_inventorFE")),
-      extract_fixest_terms(m_ppml_nofe, paste0(label, "__", spec_nm, "__", ctrl_tag, "__PPML_noInventorFE")),
-      extract_fixest_terms(m_ols_fe,    paste0(label, "__", spec_nm, "__", ctrl_tag, "__OLS_inventorFE")),
-      extract_fixest_terms(m_ols_nofe,  paste0(label, "__", spec_nm, "__", ctrl_tag, "__OLS_noInventorFE"))
-    ) %>%
-      mutate(cluster_level = label, spec = spec_nm, controls = ctrl_tag, n_obs = nrow(dspec_s))
+      m_ppml_fe <- fixest::fepois(
+        as.formula(paste0("n_patents ~ ", rhs_shares, " | user_id + year_fe")),
+        data = dspec_s, vcov = ~cluster_id, weights = wform, notes = FALSE, warn = FALSE
+      )
+      m_ppml_nofe <- fixest::fepois(
+        as.formula(paste0("n_patents ~ ", rhs_shares, " | year_fe")),
+        data = dspec_s, vcov = ~cluster_id, weights = wform, notes = FALSE, warn = FALSE
+      )
+      m_ols_fe <- fixest::feols(
+        as.formula(paste0("n_patents ~ ", rhs_shares, " | user_id + year_fe")),
+        data = dspec_s, vcov = ~cluster_id, weights = wform, notes = FALSE, warn = FALSE
+      )
+      m_ols_nofe <- fixest::feols(
+        as.formula(paste0("n_patents ~ ", rhs_shares, " | year_fe")),
+        data = dspec_s, vcov = ~cluster_id, weights = wform, notes = FALSE, warn = FALSE
+      )
 
-    all_tabs[[paste0(spec_nm, "__", ctrl_tag)]] <- tab
-    write_csv(bind_rows(all_tabs), file.path(DIRS$tables, paste0(label, "__coef_table_PROGRESS.csv")))
+      tab <- bind_rows(
+        extract_fixest_terms(m_ppml_fe,   paste0(label, "__", spec_nm, "__", ctrl_tag, "__", wtag, "__PPML_inventorFE")),
+        extract_fixest_terms(m_ppml_nofe, paste0(label, "__", spec_nm, "__", ctrl_tag, "__", wtag, "__PPML_noInventorFE")),
+        extract_fixest_terms(m_ols_fe,    paste0(label, "__", spec_nm, "__", ctrl_tag, "__", wtag, "__OLS_inventorFE")),
+        extract_fixest_terms(m_ols_nofe,  paste0(label, "__", spec_nm, "__", ctrl_tag, "__", wtag, "__OLS_noInventorFE"))
+      ) %>%
+        mutate(
+          cluster_level = label,
+          spec = spec_nm,
+          controls = ctrl_tag,
+          weight = wtag,
+          n_obs = nrow(dspec_s)
+        )
+
+      all_tabs[[paste0(spec_nm, "__", ctrl_tag, "__", wtag)]] <- tab
+      write_csv(bind_rows(all_tabs), file.path(DIRS$tables, paste0(label, "__coef_table_PROGRESS.csv")))
+    }
   }
 
   tab_all <- bind_rows(all_tabs)
   write_csv(tab_all, file.path(DIRS$tables, paste0(label, "__coef_table_ALLSPECS_ALLCONTROLS.csv")))
 
-  # Baseline PPML cluster FE (still saved, small file)
-  ts_msg("Estimating baseline PPML with cluster FE for:", label)
+  # Baseline PPML cluster FE (unweighted)
+  ts_msg("Estimating baseline PPML with cluster FE for:", label, "(UNWEIGHTED)")
   m_base <- fixest::fepois(
     as.formula("n_patents ~ tenure + tenure_sq | user_id + year_fe + cluster_id"),
     data = dd, notes = FALSE, warn = FALSE
@@ -591,9 +602,8 @@ run_models_parent_code1 <- function(df_all, cluster_var, label, meas_obj) {
 # 9) Run
 # =========================
 ts_msg("Running regressions for PARENT only...")
-out_parent <- run_models_parent_code1(df, PARENT_VAR, "PARENT", meas_parent)
+out_parent <- run_models_parent_code1(df_full, PARENT_VAR, "PARENT", meas_parent)
 
 write_csv(out_parent$coef_table, file.path(DIRS$tables, "PARENT__coef_table.csv"))
 ts_msg("DONE. Outputs in:", OUT_DIR)
 ##############################################################################
-

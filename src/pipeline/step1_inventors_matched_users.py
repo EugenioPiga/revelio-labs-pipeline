@@ -1,107 +1,114 @@
-#!/usr/bin/env python
-# step1_inventors_matched_users.py
-# - Reads USERS and INVENTORS parquet (dirs or globs)
-# - Optional limits on number of files read for smoke tests
-# - Broadcast-semi-join (no shuffle): keep inventors whose user_id ∈ users
-# - Writes Parquet only; keeps ALL columns
+#!/usr/bin/env python3
+# step1_inventors_matched_users_spark.py
+#
+# Build STEP1 dataset with Spark:
+#  - Keep only inventor-match rows whose user_id exists in academic_individual_user
+#  - Add ALL columns from academic_individual_user (sex_predicted, ethnicity_predicted, probs, etc.)
+#
+# Motivation:
+#  - Dask version can OOM on single node (big join/filter).
+#  - Spark handles this more robustly on the cluster.
+#
+# Fix for your failure:
+#  - Disable Parquet vectorized reader + set LEGACY datetime/int96 rebase
+#    to avoid VectorizedColumnReader.readBatch crashes.
 
-import os, glob, argparse
-import dask.dataframe as dd
+import argparse
+from pyspark.sql import SparkSession, functions as F
 
-try:
-    from dask.diagnostics import ProgressBar
-    HAS_PBAR = True
-except Exception:
-    HAS_PBAR = False
 
-USERS_PATH_DEFAULT     = "academic_individual_user"
-INVENTORS_PATH_DEFAULT = "revelio_patents_inventor_matches"
-OUTPUT_DIR             = "output"
-FINAL_DIR              = os.path.join(OUTPUT_DIR, "inventors_matched_users")
+def parse_args():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--users-dir", required=True, help="Path to academic_individual_user parquet dir")
+    ap.add_argument("--inventors-dir", required=True, help="Path to revelio_patents_inventor_matches parquet dir")
+    ap.add_argument("--out-dir", required=True, help="Output directory (parquet)")
+    ap.add_argument("--shuffle-partitions", type=int, default=400, help="spark.sql.shuffle.partitions")
+    ap.add_argument("--coalesce", type=int, default=200, help="Number of output files")
+    ap.add_argument("--tmpdir", default=None, help="Scratch dir for spark.local.dir")
+    ap.add_argument("--prefix-user-cols", action="store_true",
+                    help="Prefix user cols with au_ (recommended to avoid name collisions)")
+    ap.add_argument("--broadcast-users", action="store_true",
+                    help="Broadcast USERS (ONLY if users table is much smaller than inventors)")
+    return ap.parse_args()
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-def list_parquet_paths(root_or_glob: str, limit: int | None):
-    if os.path.isdir(root_or_glob):
-        # accept nested layouts
-        paths = []
-        for b, _, fs in os.walk(root_or_glob):
-            for f in fs:
-                if f.endswith(".parquet"):
-                    paths.append(os.path.join(b, f))
-    else:
-        paths = glob.glob(root_or_glob)
-    paths.sort()
-    if limit is not None:
-        paths = paths[:max(0, limit)]
-    if not paths:
-        raise FileNotFoundError(f"No parquet files found for '{root_or_glob}' with limit={limit}.")
-    return paths
-
-def read_parquets_any(root_or_glob: str, limit: int | None):
-    files = list_parquet_paths(root_or_glob, limit)
-    return dd.read_parquet(files, engine="pyarrow")
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--users", default=USERS_PATH_DEFAULT,
-                    help="Directory or glob for USERS parquet (e.g., dir or '.../*.parquet').")
-    ap.add_argument("--inventors", default=INVENTORS_PATH_DEFAULT,
-                    help="Directory or glob for INVENTORS parquet.")
-    ap.add_argument("--limit-users", type=int, default=None,
-                    help="Max number of USERS parquet files to read.")
-    ap.add_argument("--limit-inv", type=int, default=None,
-                    help="Max number of INVENTORS parquet files to read.")
-    ap.add_argument("--part-size", default="128MB", help="Output partition size.")
-    args = ap.parse_args()
+    args = parse_args()
 
-    print("[1/5] Loading USERS …")
-    users = read_parquets_any(args.users, args.limit_users).dropna(subset=["user_id"])
-    print(f"     -> USERS partitions: {users.npartitions}")
+    # ---------------- Spark session ----------------
+    builder = (
+        SparkSession.builder
+        .appName("step1_inventors_matched_users_spark")
+        .config("spark.sql.shuffle.partitions", str(args.shuffle_partitions))
+        .config("spark.sql.adaptive.enabled", "true")
 
-    print("[2/5] Loading INVENTORS …")
-    inv = read_parquets_any(args.inventors, args.limit_inv).dropna(subset=["user_id"])
-    print(f"     -> INVENTORS partitions: {inv.npartitions}")
+        .config("spark.sql.parquet.enableVectorizedReader", "false")
+        .config("spark.sql.parquet.datetimeRebaseModeInRead", "LEGACY")
+        .config("spark.sql.parquet.int96RebaseModeInRead", "LEGACY")
+        .config("spark.sql.parquet.datetimeRebaseModeInWrite", "LEGACY") 
+        .config("spark.sql.parquet.int96RebaseModeInWrite", "LEGACY")      
+        .config("spark.sql.parquet.mergeSchema", "false")
+    )
 
-    print("[3/5] Building USER ID set (broadcast) …")
-    uid_series = users["user_id"].drop_duplicates().compute()
-    uid_set = set(uid_series.tolist())
-    print(f"     -> unique users in subset: {len(uid_set):,}")
+    if args.tmpdir:
+        builder = builder.config("spark.local.dir", args.tmpdir)
 
-    print("[4/5] Filtering INVENTORS by USERS (no shuffle) …")
-    inv_filtered = inv[inv["user_id"].isin(uid_set)]  # keep ALL columns
+    spark = builder.getOrCreate()
+    spark.sparkContext.setLogLevel("INFO")
 
-    print(f"[5/5] Writing Parquet to: {FINAL_DIR}")
-    inv_filtered = inv_filtered.repartition(partition_size=args.part_size)
-    if HAS_PBAR:
-        with ProgressBar():
-            inv_filtered.to_parquet(
-                FINAL_DIR,
-                write_index=False,
-                engine="pyarrow",
-                compression="snappy",
-                overwrite=True,
-                write_metadata_file=False,
-            )
-    else:
-        inv_filtered.to_parquet(
-            FINAL_DIR,
-            write_index=False,
-            engine="pyarrow",
-            compression="snappy",
-            overwrite=True,
-            write_metadata_file=False,
-        )
+    print("[DEBUG] vectorized =", spark.conf.get("spark.sql.parquet.enableVectorizedReader"))
+    print("[DEBUG] datetimeRebaseModeInRead =", spark.conf.get("spark.sql.parquet.datetimeRebaseModeInRead"))
+    print("[DEBUG] int96RebaseModeInRead =", spark.conf.get("spark.sql.parquet.int96RebaseModeInRead"))
 
-    # Compact stats (single compute; all optional)
-    try:
-        total_rows = inv_filtered.map_partitions(len).sum()
-        uniq_users = inv_filtered["user_id"].nunique_approx()
-        total_rows, uniq_users = dd.compute(total_rows, uniq_users)
-        print(f"==> Done. Rows: {total_rows:,} | approx unique user_id: {uniq_users:,}")
-        print(f"    Parquet directory: {FINAL_DIR}")
-    except Exception:
-        print("==> Done. (Skipped final count)")
+    # ---------------- Load USERS ----------------
+    print("[1/5] Load USERS …")
+    users = (
+        spark.read
+             .option("datetimeRebaseMode", "LEGACY")
+             .option("int96RebaseMode", "LEGACY")
+             .parquet(args.users_dir)
+             .filter(F.col("user_id").isNotNull())
+             .dropDuplicates(["user_id"])  # avoid row multiplication in join
+    )
+
+   # Optionally prefix user columns (except join key)
+    if args.prefix_user_cols:
+        for c in users.columns:
+            if c != "user_id":
+                users = users.withColumnRenamed(c, f"au_{c}")
+
+    # ---------------- Load INVENTORS ----------------
+    print("[2/5] Load INVENTORS …")
+    inv = (
+        spark.read
+             .option("datetimeRebaseMode", "LEGACY")
+             .option("int96RebaseMode", "LEGACY")
+             .parquet(args.inventors_dir)
+             .filter(F.col("user_id").isNotNull())
+    )
+
+    # ---------------- Join ----------------
+    print("[3/5] Join INVENTORS ⨝ USERS on user_id …")
+    users_join = F.broadcast(users) if args.broadcast_users else users
+    joined = inv.join(users_join, on="user_id", how="inner")
+
+    # ---------------- Write output ----------------
+    print("[4/5] Write output …")
+    (
+        joined.coalesce(args.coalesce)
+              .write.mode("overwrite")
+              .option("compression", "snappy")
+              .parquet(args.out_dir)
+    )
+
+    # ---------------- Quick checks ----------------
+    print("[5/5] Quick checks …")
+    cols = joined.columns
+    print("[INFO] Output columns:", len(cols))
+
+    spark.stop()
+    print("[INFO] Done.")
+
 
 if __name__ == "__main__":
     main()

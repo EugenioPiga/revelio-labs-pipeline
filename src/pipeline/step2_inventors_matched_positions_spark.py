@@ -32,6 +32,13 @@ def main():
         .master(f"local[{args.threads}]")
         .config("spark.sql.shuffle.partitions", str(args.shuffle_partitions))
         .config("spark.sql.adaptive.enabled", "true")
+
+        # ✅ robust parquet handling (same family of issues you saw in step1)
+        .config("spark.sql.parquet.enableVectorizedReader", "false")
+        .config("spark.sql.parquet.datetimeRebaseModeInRead", "LEGACY")
+        .config("spark.sql.parquet.int96RebaseModeInRead", "LEGACY")
+        .config("spark.sql.parquet.datetimeRebaseModeInWrite", "LEGACY")
+        .config("spark.sql.parquet.int96RebaseModeInWrite", "LEGACY")
     )
     if args.tmpdir:
         builder = builder.config("spark.local.dir", args.tmpdir)
@@ -39,14 +46,23 @@ def main():
     spark = builder.getOrCreate()
     spark.sparkContext.setLogLevel("ERROR")
 
-    # ---------------- Load STEP1 ----------------
+    # ---------------- Load STEP1 and Positions ----------------
     print("[1/5] Loading STEP1 …")
-    step1 = spark.read.parquet(os.path.join(args.step1_dir, "*"))
-    step1_cols = step1.columns   # keep all inventor/patent columns
+    step1 = (
+        spark.read
+             .option("datetimeRebaseMode", "LEGACY")
+             .option("int96RebaseMode", "LEGACY")
+             .parquet(args.step1_dir)
+    )
+    step1_cols = step1.columns
 
-    # ---------------- Load POSITIONS ----------------
-    print("[2/5] Loading POSITIONS …")
-    positions = spark.read.parquet(os.path.join(args.positions_dir, "*"))
+    print("[2/5] Loading Positions …")
+    positions = (
+        spark.read
+             .option("datetimeRebaseMode", "LEGACY")
+             .option("int96RebaseMode", "LEGACY")
+             .parquet(args.positions_dir)
+    )
     pos_cols = positions.columns
 
     # ---------------- Join ----------------
