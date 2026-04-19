@@ -242,7 +242,7 @@ need <- c(
   "career_modal_section", "career_modal_class",
   "immig_first_deg_or_job_nonUS", "immig1_post", "immig1_ever", "immig2_post", "immig2_ever",
   "first_startdate_pos", "first_startdate_edu",
-  "first_university_country", "edu_first_university_country",
+  "first_university_country", "edu_first_university_country", "last_university_country",
   "first_field", "last_field"
 )
 selected_cols <- intersect(need, available)
@@ -280,7 +280,11 @@ for (v in intersect(c("n_patents", "n_applications", "n_first_inventor", "n_us_c
 }
 
 if (CONFIG$us_only && "first_country" %in% names(raw)) {
-  raw <- raw[first_country == CONFIG$us_country]
+  raw <- raw[
+    first_country == CONFIG$us_country &
+    !is.na(last_university_country) &
+    last_university_country == CONFIG$us_country
+  ]
 }
 
 setorder(raw, user_id, year)

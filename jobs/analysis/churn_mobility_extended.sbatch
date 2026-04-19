@@ -3,7 +3,7 @@
 #SBATCH --output=/home/epiga/revelio_labs/logs/mobility/moveExt_%j.out
 #SBATCH --error=/home/epiga/revelio_labs/logs/mobility/moveExt_%j.err
 #SBATCH --time=24:00:00
-#SBATCH --mem=350G
+#SBATCH --mem=400G
 #SBATCH --cpus-per-task=8
 #SBATCH --partition=general
 #SBATCH --mail-type=BEGIN,END,FAIL
