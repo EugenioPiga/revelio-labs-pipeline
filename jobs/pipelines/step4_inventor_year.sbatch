@@ -11,9 +11,16 @@
 #SBATCH --mail-type=BEGIN,END,FAIL,TIME_LIMIT
 
 set -euo pipefail
+
 mkdir -p logs
 
-echo "[INFO] Job started on $(hostname) at $(date)"
+echo "============================================================"
+echo "[INFO] Step 4: inventor-year panel with O*NET / NAICS / roles"
+echo "[INFO] Job ID: ${SLURM_JOB_ID}"
+echo "[INFO] Array task: ${SLURM_ARRAY_TASK_ID}"
+echo "[INFO] Node: ${SLURMD_NODENAME:-unknown}"
+echo "[INFO] Started at: $(date)"
+echo "============================================================"
 
 # ============================================================
 # 1) Environment
@@ -30,32 +37,105 @@ export PATH="$JAVA_HOME/bin:$PATH"
 echo "[JAVA] Using $(java -version 2>&1 | head -n 1)"
 
 # ============================================================
-# 3) Scratch ON /labs (avoid home quota)
+# 3) Scratch ON /labs
 # ============================================================
-SCRATCH_BASE="/labs/khanna/linkedin_202507/scratch/spark_inv_year"
+SCRATCH_BASE="/labs/khanna/linkedin_202507/scratch/spark_inv_year_onet_naics"
 SCRATCH="$SCRATCH_BASE/${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
 mkdir -p "$SCRATCH"/{tmp,local,warehouse}
 
 export TMPDIR="$SCRATCH/tmp"
 export SPARK_LOCAL_DIRS="$SCRATCH/local"
 
-# JVM tuning
+# JVM / Spark tuning
+export SPARK_DRIVER_MEMORY=420g
+export SPARK_EXECUTOR_MEMORY=420g
 export _JAVA_OPTIONS="-Djava.io.tmpdir=$TMPDIR -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+ExitOnOutOfMemoryError"
 export SPARK_EVENTLOG_ENABLED="false"
 
 # ============================================================
-# 4) Paths (NEW pipeline outputs)
+# 4) Paths
 # ============================================================
+CODE_DIR="$HOME/revelio_labs"
+
 STEP1_DIR="/labs/khanna/linkedin_202507/processed/step1_output/inventors_matched_users"
+
+# Modified Step 2 output.
 STEP2_DIR="/labs/khanna/linkedin_202507/processed/step2_output/inventors_matched_positions_spark"
-STEP3_DIR="/labs/khanna/linkedin_202507/processed/step3_output/inventors_matched_education_spark"
+
+# New Step 3 output.
+STEP3_DIR="/labs/khanna/linkedin_202507/processed/step3_output/inventors_matched_education_spark_onet_naics"
+
 USPTO_DIR="/labs/khanna/linkedin_202507/processed/uspto_aux_202507"
 
-OUT_DIR="/labs/khanna/linkedin_202507/processed/inventor_year_shards_v2"
+# New Step 4 output, so we do not overwrite old v2 shards.
+OUT_DIR="/labs/khanna/linkedin_202507/processed/inventor_year_shards_v2_onet_naics"
+
 mkdir -p "$OUT_DIR"
 
+echo "[PATH] CODE_DIR  = $CODE_DIR"
+echo "[PATH] STEP1_DIR = $STEP1_DIR"
+echo "[PATH] STEP2_DIR = $STEP2_DIR"
+echo "[PATH] STEP3_DIR = $STEP3_DIR"
+echo "[PATH] USPTO_DIR = $USPTO_DIR"
+echo "[PATH] OUT_DIR   = $OUT_DIR"
+echo "[PATH] SCRATCH   = $SCRATCH"
+
 # ============================================================
-# 5) Run shard
+# 5) Pre-checks
+# ============================================================
+if [ ! -d "$CODE_DIR" ]; then
+  echo "[ERROR] CODE_DIR does not exist: $CODE_DIR"
+  exit 1
+fi
+
+if [ ! -f "$CODE_DIR/step4_inventor_year.py" ]; then
+  echo "[ERROR] Step 4 script not found:"
+  echo "        $CODE_DIR/step4_inventor_year.py"
+  exit 1
+fi
+
+if [ ! -d "$STEP1_DIR" ]; then
+  echo "[ERROR] STEP1_DIR does not exist: $STEP1_DIR"
+  exit 1
+fi
+
+if [ ! -d "$STEP2_DIR" ]; then
+  echo "[ERROR] STEP2_DIR does not exist: $STEP2_DIR"
+  exit 1
+fi
+
+if [ ! -d "$STEP3_DIR" ]; then
+  echo "[ERROR] STEP3_DIR does not exist: $STEP3_DIR"
+  exit 1
+fi
+
+if [ ! -d "$USPTO_DIR" ]; then
+  echo "[ERROR] USPTO_DIR does not exist: $USPTO_DIR"
+  exit 1
+fi
+
+N_STEP2_SHARDS=$(find "$STEP2_DIR" -maxdepth 1 -type d -name "shard=*" | wc -l)
+N_STEP3_SHARDS=$(find "$STEP3_DIR" -maxdepth 1 -type d -name "shard=*" | wc -l)
+
+echo "[CHECK] Step 2 shard folders found: $N_STEP2_SHARDS"
+echo "[CHECK] Step 3 shard folders found: $N_STEP3_SHARDS"
+
+if [ "$N_STEP2_SHARDS" -ne 24 ]; then
+  echo "[ERROR] Expected 24 Step 2 shard folders but found $N_STEP2_SHARDS"
+  find "$STEP2_DIR" -maxdepth 1 -type d -name "shard=*" | sort
+  exit 1
+fi
+
+if [ "$N_STEP3_SHARDS" -ne 24 ]; then
+  echo "[ERROR] Expected 24 Step 3 shard folders but found $N_STEP3_SHARDS"
+  find "$STEP3_DIR" -maxdepth 1 -type d -name "shard=*" | sort
+  exit 1
+fi
+
+cd "$CODE_DIR"
+
+# ============================================================
+# 6) Run shard
 # ============================================================
 python -u step4_inventor_year.py \
   --shards 24 \
@@ -71,7 +151,11 @@ python -u step4_inventor_year.py \
   --tmpdir "$SCRATCH"
 
 # ============================================================
-# 6) Cleanup
+# 7) Cleanup
 # ============================================================
 rm -rf "$SCRATCH" || true
-echo "[INFO] Done."
+
+echo "============================================================"
+echo "[INFO] Finished Step 4 shard ${SLURM_ARRAY_TASK_ID} at: $(date)"
+echo "[INFO] Output shard: $OUT_DIR/shard=$(printf '%02d' "${SLURM_ARRAY_TASK_ID}")"
+echo "============================================================"
