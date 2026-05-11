@@ -53,7 +53,7 @@ export SPARK_EVENTLOG_ENABLED="false"
 # 4) Paths
 # ============================================================
 CODE_DIR="$HOME/revelio_labs"
-MERGE_SCRIPT="$CODE_DIR/inventor_year_merge_shards.py"
+MERGE_SCRIPT="$CODE_DIR/inventor_year_merge_shards_onet_naics.py"
 
 IN_DIR="/labs/khanna/linkedin_202507/processed/inventor_year_shards_v2_onet_naics"
 OUT_DIR="/labs/khanna/linkedin_202507/processed/inventor_year_merged_v2_onet_naics"
