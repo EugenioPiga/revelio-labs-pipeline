@@ -36,6 +36,26 @@ FIG_DIR  <- file.path(OUT_BASE, "figures")
 dir.create(TAB_DIR, recursive = TRUE, showWarnings = FALSE)
 dir.create(FIG_DIR, recursive = TRUE, showWarnings = FALSE)
 
+TENURE_MAX <- 50L
+
+year_from_any <- function(x) {
+  out <- suppressWarnings(as.numeric(substr(as.character(x), 1, 4)))
+  out[!is.finite(out)] <- NA_real_
+  out
+}
+
+compute_tenure <- function(df) {
+  df %>%
+    mutate(
+      edu_year = year_from_any(first_startdate_edu),
+      pos_year = year_from_any(first_startdate_pos),
+      tenure   = year - edu_year + 3,
+      tenure   = ifelse(is.na(tenure) | tenure > TENURE_MAX, year - pos_year, tenure),
+      tenure   = ifelse(tenure > TENURE_MAX | tenure < 0, NA_real_, tenure),
+      tenure_sq = tenure^2
+    )
+}
+
 safe_ratio <- function(num, den) {
   ifelse(!is.na(den) & den > 0, num / den, NA_real_)
 }
@@ -65,6 +85,8 @@ message("============================================================")
 ds <- open_dataset(DATA_PATH, format = "parquet")
 schema_names <- names(ds)
 
+
+
 # Flexible degree-country variable.
 last_degree_country_col <- NULL
 if ("last_university_country" %in% schema_names) {
@@ -82,6 +104,7 @@ if (!("first_country" %in% schema_names)) {
 required_vars <- c(
   "user_id", "year", "n_patents",
   "first_country", last_degree_country_col,
+  "first_startdate_edu", "first_startdate_pos",
   "current_onet_code", "current_naics3", "current_role_k150_v2",
   "avg_seniority",
 
@@ -312,10 +335,142 @@ evolution <- yearly %>%
 write_csv(evolution, file.path(TAB_DIR, "evolution_1990_to_2019.csv"))
 
 # ==============================================================================
-# 3. Plots
+# 3. Tenure summary
 # ==============================================================================
 
-message("[3/6] Plotting yearly trends...")
+message("[3/7] Creating tenure-based summary...")
+
+message("[3/7] Collecting filtered data and computing tenure using PPML lifecycle definition...")
+
+df_tenure <- df %>%
+  select(all_of(required_vars)) %>%
+  collect() %>%
+  mutate(
+    user_id = as.character(user_id),
+    year = as.integer(year),
+    n_patents = as.numeric(n_patents),
+    first_startdate_edu = as.character(first_startdate_edu),
+    first_startdate_pos = as.character(first_startdate_pos)
+  ) %>%
+  compute_tenure()
+
+tenure_summary <- df_tenure %>%
+  filter(
+    is.finite(tenure),
+    tenure >= 0,
+    tenure <= TENURE_MAX
+  ) %>%
+  group_by(tenure) %>%
+  summarise(
+    n_inventor_years = n(),
+    n_patenting_inventor_years = sum(if_else(n_patents > 0, 1, 0), na.rm = TRUE),
+    total_patents = sum(n_patents, na.rm = TRUE),
+
+    total_cite_links = sum(n_cite_links_total, na.rm = TRUE),
+    total_cite_links_same_parent = sum(n_cite_links_same_parent, na.rm = TRUE),
+    total_cite_links_same_parent_more_senior = sum(n_cite_links_same_parent_more_senior, na.rm = TRUE),
+    total_cite_links_same_parent_less_equal_senior = sum(n_cite_links_same_parent_less_equal_senior, na.rm = TRUE),
+    total_cite_links_same_parent_metro = sum(n_cite_links_same_parent_metro, na.rm = TRUE),
+    total_cite_links_same_parent_metro_more_senior = sum(n_cite_links_same_parent_metro_more_senior, na.rm = TRUE),
+    total_cite_links_same_parent_metro_less_equal_senior = sum(n_cite_links_same_parent_metro_less_equal_senior, na.rm = TRUE),
+
+    total_cited_patents = sum(n_cited_patents_total, na.rm = TRUE),
+    total_cited_patents_same_parent = sum(n_cited_patents_same_parent, na.rm = TRUE),
+    total_cited_patents_same_parent_more_senior = sum(n_cited_patents_same_parent_more_senior, na.rm = TRUE),
+    total_cited_patents_same_parent_less_equal_senior = sum(n_cited_patents_same_parent_less_equal_senior, na.rm = TRUE),
+    total_cited_patents_same_parent_metro = sum(n_cited_patents_same_parent_metro, na.rm = TRUE),
+    total_cited_patents_same_parent_metro_more_senior = sum(n_cited_patents_same_parent_metro_more_senior, na.rm = TRUE),
+    total_cited_patents_same_parent_metro_less_equal_senior = sum(n_cited_patents_same_parent_metro_less_equal_senior, na.rm = TRUE),
+
+    total_collab_links = sum(n_collab_links_total, na.rm = TRUE),
+    total_collab_links_same_parent = sum(n_collab_links_same_parent, na.rm = TRUE),
+    total_collab_links_same_parent_more_senior = sum(n_collab_links_same_parent_more_senior, na.rm = TRUE),
+    total_collab_links_same_parent_less_equal_senior = sum(n_collab_links_same_parent_less_equal_senior, na.rm = TRUE),
+    total_collab_links_same_parent_metro = sum(n_collab_links_same_parent_metro, na.rm = TRUE),
+    total_collab_links_same_parent_metro_more_senior = sum(n_collab_links_same_parent_metro_more_senior, na.rm = TRUE),
+    total_collab_links_same_parent_metro_less_equal_senior = sum(n_collab_links_same_parent_metro_less_equal_senior, na.rm = TRUE),
+
+    total_patents_with_any_coinventor = sum(n_patents_with_any_coinventor, na.rm = TRUE),
+    total_patents_with_same_parent_collab = sum(n_patents_with_same_parent_collab, na.rm = TRUE),
+    total_patents_with_same_parent_more_senior_collab = sum(n_patents_with_same_parent_more_senior_collab, na.rm = TRUE),
+    total_patents_with_same_parent_less_equal_senior_collab = sum(n_patents_with_same_parent_less_equal_senior_collab, na.rm = TRUE),
+    total_patents_with_same_parent_metro_collab = sum(n_patents_with_same_parent_metro_collab, na.rm = TRUE),
+    total_patents_with_same_parent_metro_more_senior_collab = sum(n_patents_with_same_parent_metro_more_senior_collab, na.rm = TRUE),
+    total_patents_with_same_parent_metro_less_equal_senior_collab = sum(n_patents_with_same_parent_metro_less_equal_senior_collab, na.rm = TRUE),
+
+    .groups = "drop"
+  ) %>%
+  arrange(tenure) %>%
+  mutate(
+    share_cite_links_same_parent = safe_ratio(total_cite_links_same_parent, total_cite_links),
+    share_cite_links_same_parent_more_senior = safe_ratio(total_cite_links_same_parent_more_senior, total_cite_links),
+    share_cite_links_same_parent_less_equal_senior = safe_ratio(total_cite_links_same_parent_less_equal_senior, total_cite_links),
+    share_cite_links_same_parent_metro = safe_ratio(total_cite_links_same_parent_metro, total_cite_links),
+    share_cite_links_same_parent_metro_more_senior = safe_ratio(total_cite_links_same_parent_metro_more_senior, total_cite_links),
+    share_cite_links_same_parent_metro_less_equal_senior = safe_ratio(total_cite_links_same_parent_metro_less_equal_senior, total_cite_links),
+
+    share_cited_patents_same_parent = safe_ratio(total_cited_patents_same_parent, total_cited_patents),
+    share_cited_patents_same_parent_more_senior = safe_ratio(total_cited_patents_same_parent_more_senior, total_cited_patents),
+    share_cited_patents_same_parent_less_equal_senior = safe_ratio(total_cited_patents_same_parent_less_equal_senior, total_cited_patents),
+    share_cited_patents_same_parent_metro = safe_ratio(total_cited_patents_same_parent_metro, total_cited_patents),
+    share_cited_patents_same_parent_metro_more_senior = safe_ratio(total_cited_patents_same_parent_metro_more_senior, total_cited_patents),
+    share_cited_patents_same_parent_metro_less_equal_senior = safe_ratio(total_cited_patents_same_parent_metro_less_equal_senior, total_cited_patents),
+
+    share_collab_links_same_parent = safe_ratio(total_collab_links_same_parent, total_collab_links),
+    share_collab_links_same_parent_more_senior = safe_ratio(total_collab_links_same_parent_more_senior, total_collab_links),
+    share_collab_links_same_parent_less_equal_senior = safe_ratio(total_collab_links_same_parent_less_equal_senior, total_collab_links),
+    share_collab_links_same_parent_metro = safe_ratio(total_collab_links_same_parent_metro, total_collab_links),
+    share_collab_links_same_parent_metro_more_senior = safe_ratio(total_collab_links_same_parent_metro_more_senior, total_collab_links),
+    share_collab_links_same_parent_metro_less_equal_senior = safe_ratio(total_collab_links_same_parent_metro_less_equal_senior, total_collab_links),
+
+    share_patents_with_any_coinventor = safe_ratio(total_patents_with_any_coinventor, total_patents),
+    share_patents_with_same_parent_collab = safe_ratio(total_patents_with_same_parent_collab, total_patents),
+    share_patents_with_same_parent_more_senior_collab = safe_ratio(total_patents_with_same_parent_more_senior_collab, total_patents),
+    share_patents_with_same_parent_less_equal_senior_collab = safe_ratio(total_patents_with_same_parent_less_equal_senior_collab, total_patents),
+    share_patents_with_same_parent_metro_collab = safe_ratio(total_patents_with_same_parent_metro_collab, total_patents),
+    share_patents_with_same_parent_metro_more_senior_collab = safe_ratio(total_patents_with_same_parent_metro_more_senior_collab, total_patents),
+    share_patents_with_same_parent_metro_less_equal_senior_collab = safe_ratio(total_patents_with_same_parent_metro_less_equal_senior_collab, total_patents)
+  )
+
+write_csv(
+  tenure_summary,
+  file.path(TAB_DIR, "tenure_1990_2019_us_lastdegree_us.csv")
+)
+
+# ==============================================================================
+# 4. Plots
+# ==============================================================================
+
+message("[4/6] Plotting yearly trends...")
+
+make_tenure_share_plot <- function(data, metric_labels, title, subtitle, y_label, filename) {
+  p <- data %>%
+    filter(tenure <= TENURE_MAX) %>%
+    select(tenure, all_of(names(metric_labels))) %>%
+    pivot_longer(-tenure, names_to = "metric", values_to = "share") %>%
+    mutate(
+      metric = factor(
+        unname(metric_labels[metric]),
+        levels = unname(metric_labels)
+      )
+    ) %>%
+    filter(!is.na(share)) %>%
+    ggplot(aes(tenure, share, color = metric)) +
+    geom_line(linewidth = 1) +
+    geom_point(size = 1.5) +
+    scale_x_continuous(breaks = seq(0, TENURE_MAX, by = 5)) +
+    scale_y_continuous(labels = percent, limits = c(0, NA)) +
+    labs(
+      title = title,
+      subtitle = subtitle,
+      x = "Inventor tenure",
+      y = y_label,
+      color = NULL
+    ) +
+    theme_clean()
+
+  save_plot(p, filename)
+}
 
 p <- yearly %>%
   select(year, coverage_onet, coverage_naics3, coverage_role150) %>%
@@ -471,10 +626,120 @@ p <- yearly %>%
 save_plot(p, "08_patent_collaboration_seniority_composition.png")
 
 # ==============================================================================
-# 4. Text summary for coauthors
+# 5. Tenure-based plots
 # ==============================================================================
 
-message("[4/6] Writing coauthor text summary...")
+message("[5/7] Plotting tenure-based collaboration and citation shares...")
+
+make_tenure_share_plot(
+  tenure_summary,
+  c(
+    share_cite_links_same_parent = "Same parent",
+    share_cite_links_same_parent_more_senior = "Same parent, more senior",
+    share_cite_links_same_parent_less_equal_senior = "Same parent, less/equal senior"
+  ),
+  title = "Citation links to colleagues by inventor tenure",
+  subtitle = "Shares of all citation-inventor links within each tenure year",
+  y_label = "Share of citation-inventor links",
+  filename = "09_tenure_citation_links_same_parent_seniority.png"
+)
+
+make_tenure_share_plot(
+  tenure_summary,
+  c(
+    share_cite_links_same_parent_metro = "Same parent × metro",
+    share_cite_links_same_parent_metro_more_senior = "Same parent × metro, more senior",
+    share_cite_links_same_parent_metro_less_equal_senior = "Same parent × metro, less/equal senior"
+  ),
+  title = "Local citation links to colleagues by inventor tenure",
+  subtitle = "Shares of all citation-inventor links within each tenure year",
+  y_label = "Share of citation-inventor links",
+  filename = "10_tenure_citation_links_same_parent_metro_seniority.png"
+)
+
+make_tenure_share_plot(
+  tenure_summary,
+  c(
+    share_cited_patents_same_parent = "Same parent",
+    share_cited_patents_same_parent_more_senior = "Same parent, more senior",
+    share_cited_patents_same_parent_less_equal_senior = "Same parent, less/equal senior"
+  ),
+  title = "Cited patents containing colleagues by inventor tenure",
+  subtitle = "Shares of all cited patents within each tenure year",
+  y_label = "Share of cited patents",
+  filename = "11_tenure_cited_patents_same_parent_seniority.png"
+)
+
+make_tenure_share_plot(
+  tenure_summary,
+  c(
+    share_cited_patents_same_parent_metro = "Same parent × metro",
+    share_cited_patents_same_parent_metro_more_senior = "Same parent × metro, more senior",
+    share_cited_patents_same_parent_metro_less_equal_senior = "Same parent × metro, less/equal senior"
+  ),
+  title = "Local cited patents containing colleagues by inventor tenure",
+  subtitle = "Shares of all cited patents within each tenure year",
+  y_label = "Share of cited patents",
+  filename = "12_tenure_cited_patents_same_parent_metro_seniority.png"
+)
+
+make_tenure_share_plot(
+  tenure_summary,
+  c(
+    share_collab_links_same_parent = "Same parent",
+    share_collab_links_same_parent_more_senior = "Same parent, more senior",
+    share_collab_links_same_parent_less_equal_senior = "Same parent, less/equal senior"
+  ),
+  title = "Collaboration links to colleagues by inventor tenure",
+  subtitle = "Shares of all co-inventor links within each tenure year",
+  y_label = "Share of co-inventor links",
+  filename = "13_tenure_collab_links_same_parent_seniority.png"
+)
+
+make_tenure_share_plot(
+  tenure_summary,
+  c(
+    share_collab_links_same_parent_metro = "Same parent × metro",
+    share_collab_links_same_parent_metro_more_senior = "Same parent × metro, more senior",
+    share_collab_links_same_parent_metro_less_equal_senior = "Same parent × metro, less/equal senior"
+  ),
+  title = "Local collaboration links to colleagues by inventor tenure",
+  subtitle = "Shares of all co-inventor links within each tenure year",
+  y_label = "Share of co-inventor links",
+  filename = "14_tenure_collab_links_same_parent_metro_seniority.png"
+)
+
+make_tenure_share_plot(
+  tenure_summary,
+  c(
+    share_patents_with_same_parent_collab = "Same parent collaborator",
+    share_patents_with_same_parent_more_senior_collab = "Same parent, more senior",
+    share_patents_with_same_parent_less_equal_senior_collab = "Same parent, less/equal senior"
+  ),
+  title = "Patent-level collaboration by inventor tenure",
+  subtitle = "Shares of all patents within each tenure year",
+  y_label = "Share of patents",
+  filename = "15_tenure_patent_collab_same_parent_seniority.png"
+)
+
+make_tenure_share_plot(
+  tenure_summary,
+  c(
+    share_patents_with_same_parent_metro_collab = "Same parent × metro collaborator",
+    share_patents_with_same_parent_metro_more_senior_collab = "Same parent × metro, more senior",
+    share_patents_with_same_parent_metro_less_equal_senior_collab = "Same parent × metro, less/equal senior"
+  ),
+  title = "Local patent-level collaboration by inventor tenure",
+  subtitle = "Shares of all patents within each tenure year",
+  y_label = "Share of patents",
+  filename = "16_tenure_patent_collab_same_parent_metro_seniority.png"
+)
+
+# ==============================================================================
+# 6. Text summary
+# ==============================================================================
+
+message("[6/7] Writing text summary...")
 
 d <- decade[1, ]
 
@@ -523,9 +788,9 @@ summary_lines <- c(
   "  The key empirical distinction is between internal knowledge flows through citations and internal production through co-inventorship."
 )
 
-writeLines(summary_lines, file.path(OUT_BASE, "coauthor_summary_1990_2019_us.txt"))
+writeLines(summary_lines, file.path(OUT_BASE, "summary_1990_2019_us.txt"))
 
-message("[5/6] Done.")
+message("[7/7] Done.")
 message("Tables:  ", TAB_DIR)
 message("Figures: ", FIG_DIR)
-message("Summary: ", file.path(OUT_BASE, "coauthor_summary_1990_2019_us.txt"))
+message("Summary: ", file.path(OUT_BASE, "summary_1990_2019_us.txt"))
