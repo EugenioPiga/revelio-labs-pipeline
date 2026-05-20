@@ -25,7 +25,10 @@ echo "============================================================"
 # ============================================================
 # 1) Environment
 # ============================================================
+# Temporarily disable nounset around conda activation.
+set +u
 source "$HOME/miniconda/bin/activate" revelio
+set -u
 echo "[INFO] Using Python from: $(which python)"
 python --version
 
@@ -55,7 +58,7 @@ export SPARK_EVENTLOG_ENABLED="false"
 # ============================================================
 # 4) Paths
 # ============================================================
-CODE_DIR="$HOME/revelio_labs"
+CODE_DIR="$HOME/innovation_linkedin/src/pipelines"
 
 STEP1_DIR="/labs/khanna/linkedin_202507/processed/step1_output/inventors_matched_users"
 

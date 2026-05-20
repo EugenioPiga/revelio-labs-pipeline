@@ -12,7 +12,10 @@
 set -euo pipefail
 mkdir -p logs
 
+# Temporarily disable nounset around conda activation.
+set +u
 source "$HOME/miniconda/bin/activate" revelio
+set -u
 export JAVA_HOME="$HOME/jdk-17"
 export PATH="$JAVA_HOME/bin:$PATH"
 

@@ -124,6 +124,32 @@ required_vars <- c(
   "n_cited_patents_same_parent_metro_more_senior",
   "n_cited_patents_same_parent_metro_less_equal_senior",
 
+  # Incoming citation-link counts: citations RECEIVED by focal inventor
+  "n_cite_links_received_total",
+  "n_cite_links_received_same_parent",
+  "n_cite_links_received_same_parent_from_more_senior",
+  "n_cite_links_received_same_parent_from_less_senior",
+  "n_cite_links_received_same_parent_from_equal_senior",
+  "n_cite_links_received_same_parent_from_less_equal_senior",
+  "n_cite_links_received_same_parent_metro",
+  "n_cite_links_received_same_parent_metro_from_more_senior",
+  "n_cite_links_received_same_parent_metro_from_less_senior",
+  "n_cite_links_received_same_parent_metro_from_equal_senior",
+  "n_cite_links_received_same_parent_metro_from_less_equal_senior",
+
+  # Incoming citing-patent counts: citing patents that cite focal inventor
+  "n_citing_patents_received_total",
+  "n_citing_patents_received_same_parent",
+  "n_citing_patents_received_same_parent_from_more_senior",
+  "n_citing_patents_received_same_parent_from_less_senior",
+  "n_citing_patents_received_same_parent_from_equal_senior",
+  "n_citing_patents_received_same_parent_from_less_equal_senior",
+  "n_citing_patents_received_same_parent_metro",
+  "n_citing_patents_received_same_parent_metro_from_more_senior",
+  "n_citing_patents_received_same_parent_metro_from_less_senior",
+  "n_citing_patents_received_same_parent_metro_from_equal_senior",
+  "n_citing_patents_received_same_parent_metro_from_less_equal_senior",
+
   "n_collab_links_total",
   "n_collab_links_same_parent",
   "n_collab_links_same_parent_more_senior",
@@ -190,6 +216,25 @@ decade <- df %>%
     total_cited_patents_same_parent_metro_more_senior = sum(n_cited_patents_same_parent_metro_more_senior, na.rm = TRUE),
     total_cited_patents_same_parent_metro_less_equal_senior = sum(n_cited_patents_same_parent_metro_less_equal_senior, na.rm = TRUE),
 
+    total_cite_links_received = sum(n_cite_links_received_total, na.rm = TRUE),
+    total_cite_links_received_same_parent = sum(n_cite_links_received_same_parent, na.rm = TRUE),
+    total_cite_links_received_same_parent_from_more_senior = sum(n_cite_links_received_same_parent_from_more_senior, na.rm = TRUE),
+    total_cite_links_received_same_parent_from_less_senior = sum(n_cite_links_received_same_parent_from_less_senior, na.rm = TRUE),
+    total_cite_links_received_same_parent_from_equal_senior = sum(n_cite_links_received_same_parent_from_equal_senior, na.rm = TRUE),
+    total_cite_links_received_same_parent_from_less_equal_senior = sum(n_cite_links_received_same_parent_from_less_equal_senior, na.rm = TRUE),
+    total_cite_links_received_same_parent_metro = sum(n_cite_links_received_same_parent_metro, na.rm = TRUE),
+    total_cite_links_received_same_parent_metro_from_more_senior = sum(n_cite_links_received_same_parent_metro_from_more_senior, na.rm = TRUE),
+    total_cite_links_received_same_parent_metro_from_less_senior = sum(n_cite_links_received_same_parent_metro_from_less_senior, na.rm = TRUE),
+    total_cite_links_received_same_parent_metro_from_equal_senior = sum(n_cite_links_received_same_parent_metro_from_equal_senior, na.rm = TRUE),
+    total_cite_links_received_same_parent_metro_from_less_equal_senior = sum(n_cite_links_received_same_parent_metro_from_less_equal_senior, na.rm = TRUE),
+
+    total_citing_patents_received = sum(n_citing_patents_received_total, na.rm = TRUE),
+    total_citing_patents_received_same_parent = sum(n_citing_patents_received_same_parent, na.rm = TRUE),
+    total_citing_patents_received_same_parent_from_more_senior = sum(n_citing_patents_received_same_parent_from_more_senior, na.rm = TRUE),
+    total_citing_patents_received_same_parent_from_less_senior = sum(n_citing_patents_received_same_parent_from_less_senior, na.rm = TRUE),
+    total_citing_patents_received_same_parent_from_equal_senior = sum(n_citing_patents_received_same_parent_from_equal_senior, na.rm = TRUE),
+    total_citing_patents_received_same_parent_from_less_equal_senior = sum(n_citing_patents_received_same_parent_from_less_equal_senior, na.rm = TRUE),
+
     total_collab_links = sum(n_collab_links_total, na.rm = TRUE),
     total_collab_links_same_parent = sum(n_collab_links_same_parent, na.rm = TRUE),
     total_collab_links_same_parent_more_senior = sum(n_collab_links_same_parent_more_senior, na.rm = TRUE),
@@ -221,6 +266,29 @@ decade <- df %>%
     share_cited_patents_same_parent_metro = safe_ratio(total_cited_patents_same_parent_metro, total_cited_patents),
     share_cited_patents_same_parent_more_senior = safe_ratio(total_cited_patents_same_parent_more_senior, total_cited_patents_same_parent),
     share_cited_patents_same_parent_less_equal_senior = safe_ratio(total_cited_patents_same_parent_less_equal_senior, total_cited_patents_same_parent),
+
+    share_cite_links_received_same_parent =
+      safe_ratio(total_cite_links_received_same_parent, total_cite_links_received),
+    share_cite_links_received_same_parent_metro =
+      safe_ratio(total_cite_links_received_same_parent_metro, total_cite_links_received),
+
+    share_cite_links_received_same_parent_from_more_senior =
+      safe_ratio(total_cite_links_received_same_parent_from_more_senior, total_cite_links_received_same_parent),
+    share_cite_links_received_same_parent_from_less_senior =
+      safe_ratio(total_cite_links_received_same_parent_from_less_senior, total_cite_links_received_same_parent),
+    share_cite_links_received_same_parent_from_equal_senior =
+      safe_ratio(total_cite_links_received_same_parent_from_equal_senior, total_cite_links_received_same_parent),
+    share_cite_links_received_same_parent_from_less_equal_senior =
+      safe_ratio(total_cite_links_received_same_parent_from_less_equal_senior, total_cite_links_received_same_parent),
+
+    share_citing_patents_received_same_parent =
+      safe_ratio(total_citing_patents_received_same_parent, total_citing_patents_received),
+    share_citing_patents_received_same_parent_from_more_senior =
+      safe_ratio(total_citing_patents_received_same_parent_from_more_senior, total_citing_patents_received_same_parent),
+    share_citing_patents_received_same_parent_from_less_senior =
+      safe_ratio(total_citing_patents_received_same_parent_from_less_senior, total_citing_patents_received_same_parent),
+    share_citing_patents_received_same_parent_from_equal_senior =
+      safe_ratio(total_citing_patents_received_same_parent_from_equal_senior, total_citing_patents_received_same_parent),
 
     share_collab_links_same_parent = safe_ratio(total_collab_links_same_parent, total_collab_links),
     share_collab_links_same_parent_metro = safe_ratio(total_collab_links_same_parent_metro, total_collab_links),
@@ -265,6 +333,20 @@ yearly <- df %>%
     total_cited_patents_same_parent_less_equal_senior = sum(n_cited_patents_same_parent_less_equal_senior, na.rm = TRUE),
     total_cited_patents_same_parent_metro = sum(n_cited_patents_same_parent_metro, na.rm = TRUE),
 
+    total_cite_links_received = sum(n_cite_links_received_total, na.rm = TRUE),
+    total_cite_links_received_same_parent = sum(n_cite_links_received_same_parent, na.rm = TRUE),
+    total_cite_links_received_same_parent_from_more_senior = sum(n_cite_links_received_same_parent_from_more_senior, na.rm = TRUE),
+    total_cite_links_received_same_parent_from_less_senior = sum(n_cite_links_received_same_parent_from_less_senior, na.rm = TRUE),
+    total_cite_links_received_same_parent_from_equal_senior = sum(n_cite_links_received_same_parent_from_equal_senior, na.rm = TRUE),
+    total_cite_links_received_same_parent_from_less_equal_senior = sum(n_cite_links_received_same_parent_from_less_equal_senior, na.rm = TRUE),
+    total_cite_links_received_same_parent_metro = sum(n_cite_links_received_same_parent_metro, na.rm = TRUE),
+
+    total_citing_patents_received = sum(n_citing_patents_received_total, na.rm = TRUE),
+    total_citing_patents_received_same_parent = sum(n_citing_patents_received_same_parent, na.rm = TRUE),
+    total_citing_patents_received_same_parent_from_more_senior = sum(n_citing_patents_received_same_parent_from_more_senior, na.rm = TRUE),
+    total_citing_patents_received_same_parent_from_less_senior = sum(n_citing_patents_received_same_parent_from_less_senior, na.rm = TRUE),
+    total_citing_patents_received_same_parent_from_equal_senior = sum(n_citing_patents_received_same_parent_from_equal_senior, na.rm = TRUE),
+
     total_collab_links = sum(n_collab_links_total, na.rm = TRUE),
     total_collab_links_same_parent = sum(n_collab_links_same_parent, na.rm = TRUE),
     total_collab_links_same_parent_more_senior = sum(n_collab_links_same_parent_more_senior, na.rm = TRUE),
@@ -295,6 +377,29 @@ yearly <- df %>%
     share_cited_patents_same_parent_more_senior = safe_ratio(total_cited_patents_same_parent_more_senior, total_cited_patents_same_parent),
     share_cited_patents_same_parent_less_equal_senior = safe_ratio(total_cited_patents_same_parent_less_equal_senior, total_cited_patents_same_parent),
 
+    share_cite_links_received_same_parent =
+      safe_ratio(total_cite_links_received_same_parent, total_cite_links_received),
+    share_cite_links_received_same_parent_metro =
+      safe_ratio(total_cite_links_received_same_parent_metro, total_cite_links_received),
+
+    share_cite_links_received_same_parent_from_more_senior =
+      safe_ratio(total_cite_links_received_same_parent_from_more_senior, total_cite_links_received_same_parent),
+    share_cite_links_received_same_parent_from_less_senior =
+      safe_ratio(total_cite_links_received_same_parent_from_less_senior, total_cite_links_received_same_parent),
+    share_cite_links_received_same_parent_from_equal_senior =
+      safe_ratio(total_cite_links_received_same_parent_from_equal_senior, total_cite_links_received_same_parent),
+    share_cite_links_received_same_parent_from_less_equal_senior =
+      safe_ratio(total_cite_links_received_same_parent_from_less_equal_senior, total_cite_links_received_same_parent),
+
+    share_citing_patents_received_same_parent =
+      safe_ratio(total_citing_patents_received_same_parent, total_citing_patents_received),
+    share_citing_patents_received_same_parent_from_more_senior =
+      safe_ratio(total_citing_patents_received_same_parent_from_more_senior, total_citing_patents_received_same_parent),
+    share_citing_patents_received_same_parent_from_less_senior =
+      safe_ratio(total_citing_patents_received_same_parent_from_less_senior, total_citing_patents_received_same_parent),
+    share_citing_patents_received_same_parent_from_equal_senior =
+      safe_ratio(total_citing_patents_received_same_parent_from_equal_senior, total_citing_patents_received_same_parent),
+
     share_collab_links_same_parent = safe_ratio(total_collab_links_same_parent, total_collab_links),
     share_collab_links_same_parent_metro = safe_ratio(total_collab_links_same_parent_metro, total_collab_links),
     share_collab_links_same_parent_more_senior = safe_ratio(total_collab_links_same_parent_more_senior, total_collab_links_same_parent),
@@ -314,6 +419,11 @@ evolution_vars <- c(
   "coverage_onet", "coverage_naics3", "coverage_role150",
   "share_cite_links_same_parent", "share_cite_links_same_parent_metro",
   "share_cite_links_same_parent_more_senior", "share_cite_links_same_parent_less_equal_senior",
+  "share_cite_links_received_same_parent",
+  "share_cite_links_received_same_parent_metro",
+  "share_cite_links_received_same_parent_from_more_senior",
+  "share_cite_links_received_same_parent_from_less_senior",
+  "share_cite_links_received_same_parent_from_equal_senior",
   "share_collab_links_same_parent", "share_collab_links_same_parent_metro",
   "share_collab_links_same_parent_more_senior", "share_collab_links_same_parent_less_equal_senior",
   "share_patents_with_any_coinventor",
@@ -382,6 +492,29 @@ tenure_summary <- df_tenure %>%
     total_cited_patents_same_parent_metro_more_senior = sum(n_cited_patents_same_parent_metro_more_senior, na.rm = TRUE),
     total_cited_patents_same_parent_metro_less_equal_senior = sum(n_cited_patents_same_parent_metro_less_equal_senior, na.rm = TRUE),
 
+    total_cite_links_received = sum(n_cite_links_received_total, na.rm = TRUE),
+    total_cite_links_received_same_parent = sum(n_cite_links_received_same_parent, na.rm = TRUE),
+    total_cite_links_received_same_parent_from_more_senior = sum(n_cite_links_received_same_parent_from_more_senior, na.rm = TRUE),
+    total_cite_links_received_same_parent_from_less_senior = sum(n_cite_links_received_same_parent_from_less_senior, na.rm = TRUE),
+    total_cite_links_received_same_parent_from_equal_senior = sum(n_cite_links_received_same_parent_from_equal_senior, na.rm = TRUE),
+    total_cite_links_received_same_parent_from_less_equal_senior = sum(n_cite_links_received_same_parent_from_less_equal_senior, na.rm = TRUE),
+    total_cite_links_received_same_parent_metro = sum(n_cite_links_received_same_parent_metro, na.rm = TRUE),
+    total_cite_links_received_same_parent_metro_from_more_senior = sum(n_cite_links_received_same_parent_metro_from_more_senior, na.rm = TRUE),
+    total_cite_links_received_same_parent_metro_from_less_senior = sum(n_cite_links_received_same_parent_metro_from_less_senior, na.rm = TRUE),
+    total_cite_links_received_same_parent_metro_from_equal_senior = sum(n_cite_links_received_same_parent_metro_from_equal_senior, na.rm = TRUE),
+    total_cite_links_received_same_parent_metro_from_less_equal_senior = sum(n_cite_links_received_same_parent_metro_from_less_equal_senior, na.rm = TRUE),
+
+    total_citing_patents_received = sum(n_citing_patents_received_total, na.rm = TRUE),
+    total_citing_patents_received_same_parent = sum(n_citing_patents_received_same_parent, na.rm = TRUE),
+    total_citing_patents_received_same_parent_from_more_senior = sum(n_citing_patents_received_same_parent_from_more_senior, na.rm = TRUE),
+    total_citing_patents_received_same_parent_from_less_senior = sum(n_citing_patents_received_same_parent_from_less_senior, na.rm = TRUE),
+    total_citing_patents_received_same_parent_from_equal_senior = sum(n_citing_patents_received_same_parent_from_equal_senior, na.rm = TRUE),
+    total_citing_patents_received_same_parent_from_less_equal_senior = sum(n_citing_patents_received_same_parent_from_less_equal_senior, na.rm = TRUE),
+    total_citing_patents_received_same_parent_metro = sum(n_citing_patents_received_same_parent_metro, na.rm = TRUE),
+    total_citing_patents_received_same_parent_metro_from_more_senior = sum(n_citing_patents_received_same_parent_metro_from_more_senior, na.rm = TRUE),
+    total_citing_patents_received_same_parent_metro_from_less_senior = sum(n_citing_patents_received_same_parent_metro_from_less_senior, na.rm = TRUE),
+    total_citing_patents_received_same_parent_metro_from_equal_senior = sum(n_citing_patents_received_same_parent_metro_from_equal_senior, na.rm = TRUE),
+
     total_collab_links = sum(n_collab_links_total, na.rm = TRUE),
     total_collab_links_same_parent = sum(n_collab_links_same_parent, na.rm = TRUE),
     total_collab_links_same_parent_more_senior = sum(n_collab_links_same_parent_more_senior, na.rm = TRUE),
@@ -416,6 +549,66 @@ tenure_summary <- df_tenure %>%
     share_cited_patents_same_parent_metro_more_senior = safe_ratio(total_cited_patents_same_parent_metro_more_senior, total_cited_patents),
     share_cited_patents_same_parent_metro_less_equal_senior = safe_ratio(total_cited_patents_same_parent_metro_less_equal_senior, total_cited_patents),
 
+    # Incoming citations received: shares over all incoming citation links.
+    share_cite_links_received_same_parent =
+      safe_ratio(total_cite_links_received_same_parent, total_cite_links_received),
+    share_cite_links_received_same_parent_metro =
+      safe_ratio(total_cite_links_received_same_parent_metro, total_cite_links_received),
+
+    share_cite_links_received_same_parent_from_more_senior_all =
+      safe_ratio(total_cite_links_received_same_parent_from_more_senior, total_cite_links_received),
+    share_cite_links_received_same_parent_from_less_senior_all =
+      safe_ratio(total_cite_links_received_same_parent_from_less_senior, total_cite_links_received),
+    share_cite_links_received_same_parent_from_equal_senior_all =
+      safe_ratio(total_cite_links_received_same_parent_from_equal_senior, total_cite_links_received),
+
+    # Incoming citations received: seniority composition conditional on same-parent citations.
+    # This is the direct answer to the coauthor question.
+    share_cite_links_received_same_parent_from_more_senior =
+      safe_ratio(total_cite_links_received_same_parent_from_more_senior, total_cite_links_received_same_parent),
+    share_cite_links_received_same_parent_from_less_senior =
+      safe_ratio(total_cite_links_received_same_parent_from_less_senior, total_cite_links_received_same_parent),
+    share_cite_links_received_same_parent_from_equal_senior =
+      safe_ratio(total_cite_links_received_same_parent_from_equal_senior, total_cite_links_received_same_parent),
+    share_cite_links_received_same_parent_from_less_equal_senior =
+      safe_ratio(total_cite_links_received_same_parent_from_less_equal_senior, total_cite_links_received_same_parent),
+
+    cite_links_received_same_parent_from_more_senior_per_1000_iy =
+      1000 * safe_ratio(total_cite_links_received_same_parent_from_more_senior, n_inventor_years),
+    cite_links_received_same_parent_from_less_senior_per_1000_iy =
+      1000 * safe_ratio(total_cite_links_received_same_parent_from_less_senior, n_inventor_years),
+    cite_links_received_same_parent_from_equal_senior_per_1000_iy =
+      1000 * safe_ratio(total_cite_links_received_same_parent_from_equal_senior, n_inventor_years),
+
+    # Patent-level incoming citation composition.
+    share_citing_patents_received_same_parent =
+      safe_ratio(total_citing_patents_received_same_parent, total_citing_patents_received),
+    share_citing_patents_received_same_parent_from_more_senior =
+      safe_ratio(total_citing_patents_received_same_parent_from_more_senior, total_citing_patents_received_same_parent),
+    share_citing_patents_received_same_parent_from_less_senior =
+      safe_ratio(total_citing_patents_received_same_parent_from_less_senior, total_citing_patents_received_same_parent),
+    share_citing_patents_received_same_parent_from_equal_senior =
+      safe_ratio(total_citing_patents_received_same_parent_from_equal_senior, total_citing_patents_received_same_parent),
+
+    # Incoming citations received: composition among links with observed relative seniority.
+    # These three shares sum to one within each tenure year, conditional on seniority being classified.
+    total_cite_links_received_same_parent_classified =
+      total_cite_links_received_same_parent_from_less_senior +
+      total_cite_links_received_same_parent_from_equal_senior +
+      total_cite_links_received_same_parent_from_more_senior,
+
+    share_cite_links_received_same_parent_from_less_senior_classified =
+      safe_ratio(total_cite_links_received_same_parent_from_less_senior,
+                 total_cite_links_received_same_parent_classified),
+
+    share_cite_links_received_same_parent_from_equal_senior_classified =
+      safe_ratio(total_cite_links_received_same_parent_from_equal_senior,
+                 total_cite_links_received_same_parent_classified),
+
+    share_cite_links_received_same_parent_from_more_senior_classified =
+      safe_ratio(total_cite_links_received_same_parent_from_more_senior,
+                 total_cite_links_received_same_parent_classified),
+
     share_collab_links_same_parent = safe_ratio(total_collab_links_same_parent, total_collab_links),
     share_collab_links_same_parent_more_senior = safe_ratio(total_collab_links_same_parent_more_senior, total_collab_links),
     share_collab_links_same_parent_less_equal_senior = safe_ratio(total_collab_links_same_parent_less_equal_senior, total_collab_links),
@@ -435,6 +628,53 @@ tenure_summary <- df_tenure %>%
 write_csv(
   tenure_summary,
   file.path(TAB_DIR, "tenure_1990_2019_us_lastdegree_us.csv")
+)
+
+tenure_bin_summary <- tenure_summary %>%
+  mutate(
+    tenure_bin = case_when(
+      tenure >= 0  & tenure <= 5  ~ "0-5",
+      tenure >= 6  & tenure <= 10 ~ "6-10",
+      tenure >= 11 & tenure <= 15 ~ "11-15",
+      tenure >= 16 & tenure <= 20 ~ "16-20",
+      tenure >= 21 & tenure <= 25 ~ "21-25",
+      tenure >= 26 & tenure <= 30 ~ "26-30",
+      tenure >= 31 & tenure <= 35 ~ "31-35",
+      tenure >= 36 & tenure <= 40 ~ "36-40",
+      tenure >= 41 & tenure <= 45 ~ "41-45",
+      tenure >= 46 & tenure <= 50 ~ "46-50",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(tenure_bin)) %>%
+  group_by(tenure_bin) %>%
+  summarise(
+    n_inventor_years = sum(n_inventor_years, na.rm = TRUE),
+    received_same_parent = sum(total_cite_links_received_same_parent, na.rm = TRUE),
+    from_junior = sum(total_cite_links_received_same_parent_from_less_senior, na.rm = TRUE),
+    from_equal = sum(total_cite_links_received_same_parent_from_equal_senior, na.rm = TRUE),
+    from_senior = sum(total_cite_links_received_same_parent_from_more_senior, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    tenure_bin = factor(
+      tenure_bin,
+      levels = c("0-5", "6-10", "11-15", "16-20", "21-25",
+                 "26-30", "31-35", "36-40", "41-45", "46-50"),
+      ordered = TRUE
+    ),
+    classified = from_junior + from_equal + from_senior,
+    share_junior_classified = safe_ratio(from_junior, classified),
+    share_equal_classified = safe_ratio(from_equal, classified),
+    share_senior_classified = safe_ratio(from_senior, classified),
+    junior_per_1000_iy = 1000 * safe_ratio(from_junior, n_inventor_years),
+    senior_per_1000_iy = 1000 * safe_ratio(from_senior, n_inventor_years)
+  ) %>%
+  arrange(tenure_bin)
+
+write_csv(
+  tenure_bin_summary,
+  file.path(TAB_DIR, "tenure_bins_incoming_citations_received_1990_2019_us_lastdegree_us.csv")
 )
 
 # ==============================================================================
@@ -471,6 +711,36 @@ make_tenure_share_plot <- function(data, metric_labels, title, subtitle, y_label
 
   save_plot(p, filename)
 }
+
+make_tenure_value_plot <- function(data, metric_labels, title, subtitle, y_label, filename) {
+  p <- data %>%
+    filter(tenure <= TENURE_MAX) %>%
+    select(tenure, all_of(names(metric_labels))) %>%
+    pivot_longer(-tenure, names_to = "metric", values_to = "value") %>%
+    mutate(
+      metric = factor(
+        unname(metric_labels[metric]),
+        levels = unname(metric_labels)
+      )
+    ) %>%
+    filter(!is.na(value)) %>%
+    ggplot(aes(tenure, value, color = metric)) +
+    geom_line(linewidth = 1) +
+    geom_point(size = 1.5) +
+    scale_x_continuous(breaks = seq(0, TENURE_MAX, by = 5)) +
+    scale_y_continuous(limits = c(0, NA)) +
+    labs(
+      title = title,
+      subtitle = subtitle,
+      x = "Focal inventor tenure",
+      y = y_label,
+      color = NULL
+    ) +
+    theme_clean()
+
+  save_plot(p, filename)
+}
+
 
 p <- yearly %>%
   select(year, coverage_onet, coverage_naics3, coverage_role150) %>%
@@ -735,6 +1005,126 @@ make_tenure_share_plot(
   filename = "16_tenure_patent_collab_same_parent_metro_seniority.png"
 )
 
+# Interpretation:
+#   Focal inventor = cited inventor.
+#   Junior/senior = citing inventor's seniority relative to focal inventor.
+#   Parent = same parent firm.
+
+make_tenure_share_plot(
+  tenure_summary,
+  c(
+    share_cite_links_received_same_parent_from_less_senior = "Citations from junior same-parent inventors",
+    share_cite_links_received_same_parent_from_equal_senior = "Citations from same-seniority same-parent inventors",
+    share_cite_links_received_same_parent_from_more_senior = "Citations from senior same-parent inventors"
+  ),
+  title = "Who cites the focal inventor inside the same parent firm?",
+  subtitle = "Among same-parent citations received, split by citing inventor seniority relative to focal inventor",
+  y_label = "Share among same-parent citations received",
+  filename = "17_tenure_incoming_citations_received_same_parent_seniority_composition.png"
+)
+
+make_tenure_value_plot(
+  tenure_summary,
+  c(
+    cite_links_received_same_parent_from_less_senior_per_1000_iy = "Citations from junior same-parent inventors",
+    cite_links_received_same_parent_from_equal_senior_per_1000_iy = "Citations from same-seniority same-parent inventors",
+    cite_links_received_same_parent_from_more_senior_per_1000_iy = "Citations from senior same-parent inventors"
+  ),
+  title = "Incoming same-parent citation intensity over focal inventor tenure",
+  subtitle = "Citation links received from junior, same-seniority, and senior inventors per 1,000 inventor-years",
+  y_label = "Citation links per 1,000 inventor-years",
+  filename = "18_tenure_incoming_citations_received_same_parent_seniority_levels.png"
+)
+
+make_tenure_share_plot(
+  tenure_summary,
+  c(
+    share_cite_links_received_same_parent = "Same parent",
+    share_cite_links_received_same_parent_metro = "Same parent × metro"
+  ),
+  title = "Incoming citations from internal colleagues by focal inventor tenure",
+  subtitle = "Share of all citations received that come from same-parent or same-parent × metro inventors",
+  y_label = "Share of incoming citation links received",
+  filename = "19_tenure_incoming_citations_received_same_parent_parent_metro.png"
+)
+
+make_tenure_share_plot(
+  tenure_summary,
+  c(
+    share_citing_patents_received_same_parent_from_less_senior = "Citing patent has junior same-parent inventor",
+    share_citing_patents_received_same_parent_from_equal_senior = "Citing patent has same-seniority same-parent inventor",
+    share_citing_patents_received_same_parent_from_more_senior = "Citing patent has senior same-parent inventor"
+  ),
+  title = "Patent-level incoming citation composition by focal inventor tenure",
+  subtitle = "Among same-parent citing patents received, split by seniority of citing inventor",
+  y_label = "Share among same-parent citing patents received",
+  filename = "20_tenure_incoming_citing_patents_received_same_parent_seniority.png"
+)
+
+make_tenure_share_plot(
+  tenure_summary,
+  c(
+    share_cite_links_received_same_parent_from_less_senior_classified = "Junior same-parent inventors",
+    share_cite_links_received_same_parent_from_equal_senior_classified = "Same-seniority same-parent inventors",
+    share_cite_links_received_same_parent_from_more_senior_classified = "Senior same-parent inventors"
+  ),
+  title = "Who cites the focal inventor inside the same parent firm?",
+  subtitle = "Composition among same-parent incoming citations with observed relative seniority",
+  y_label = "Share among classified same-parent incoming citations",
+  filename = "21_tenure_incoming_citations_received_same_parent_seniority_classified_only.png"
+)
+
+p <- tenure_bin_summary %>%
+  select(tenure_bin, share_junior_classified, share_equal_classified, share_senior_classified) %>%
+  pivot_longer(-tenure_bin, names_to = "metric", values_to = "share") %>%
+  mutate(
+    metric = recode(
+      metric,
+      share_junior_classified = "Junior same-parent inventors",
+      share_equal_classified = "Same-seniority same-parent inventors",
+      share_senior_classified = "Senior same-parent inventors"
+    )
+  ) %>%
+  ggplot(aes(tenure_bin, share, color = metric, group = metric)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2.2) +
+  scale_y_continuous(labels = percent, limits = c(0, NA)) +
+  labs(
+    title = "Who cites the focal inventor inside the same parent firm?",
+    subtitle = "5-year tenure bins; composition among classified same-parent incoming citations",
+    x = "Focal inventor tenure bin",
+    y = "Share among classified same-parent incoming citations",
+    color = NULL
+  ) +
+  theme_clean()
+
+save_plot(p, "22_tenure_bins_incoming_citations_received_same_parent_seniority_classified.png")
+
+p <- tenure_bin_summary %>%
+  select(tenure_bin, junior_per_1000_iy, senior_per_1000_iy) %>%
+  pivot_longer(-tenure_bin, names_to = "metric", values_to = "value") %>%
+  mutate(
+    metric = recode(
+      metric,
+      junior_per_1000_iy = "Citations from junior same-parent inventors",
+      senior_per_1000_iy = "Citations from senior same-parent inventors"
+    )
+  ) %>%
+  ggplot(aes(tenure_bin, value, color = metric, group = metric)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2.2) +
+  scale_y_continuous(limits = c(0, NA)) +
+  labs(
+    title = "Incoming same-parent citation intensity over tenure",
+    subtitle = "5-year tenure bins; citation links received per 1,000 inventor-years",
+    x = "Focal inventor tenure bin",
+    y = "Citation links per 1,000 inventor-years",
+    color = NULL
+  ) +
+  theme_clean()
+
+save_plot(p, "23_tenure_bins_incoming_citations_received_junior_vs_senior_levels.png")
+
 # ==============================================================================
 # 6. Text summary
 # ==============================================================================
@@ -752,12 +1142,13 @@ summary_lines <- c(
   "  - last degree country == United States",
   "",
   "Construction:",
-  "  Citation-to-colleague measures start from USPTO citation edges.",
+  "  Citation-to-colleague and incoming citation-received measures start from USPTO citation edges.",
   "  For each citing patent, we identify the focal inventor i and each inventor j on the cited patent.",
   "  We then compare i and j in the citing patent filing year.",
   "  Collaboration measures use co-inventor pairs on the same patent and compare i and j in the patent filing year.",
   "  Same-parent means i and j share the same parent firm. Same-parent-metro also requires the same metro.",
-  "  More senior means floor(avg_seniority_j) > floor(avg_seniority_i). Less/equal senior means the opposite weak inequality.",
+  "  For outgoing citations, more senior means floor(avg_seniority_j) > floor(avg_seniority_i), where i is the citing inventor and j is the cited inventor.",
+  "  For incoming citations, junior/senior status is reversed into the focal inventor's perspective: junior means the citing inventor is less senior than the cited/focal inventor.",
   "",
   sprintf("Inventor-years: %s", comma(d$n_inventor_years)),
   sprintf("Patents: %s", comma(d$total_patents)),
@@ -775,6 +1166,21 @@ summary_lines <- c(
   sprintf("Collaboration links to same-parent-metro colleagues: %.1f%%", 100 * d$share_collab_links_same_parent_metro),
   sprintf("Among same-parent collaboration links, share with more-senior colleagues: %.1f%%", 100 * d$share_collab_links_same_parent_more_senior),
   sprintf("Among same-parent collaboration links, share with less/equal-senior colleagues: %.1f%%", 100 * d$share_collab_links_same_parent_less_equal_senior),
+  "",
+  "Incoming citations received:",
+  "  These reverse the direction of the citation edge.",
+  "  Existing citation variables ask: whom does inventor i cite?",
+  "  Incoming citation variables ask: who cites inventor i?",
+  "  The coauthor question is answered by graph 17, which plots over focal inventor tenure",
+  "  whether same-parent citations received come from junior, same-seniority, or senior inventors.",
+  sprintf("Incoming citation links received from same-parent inventors: %.1f%%",
+          100 * d$share_cite_links_received_same_parent),
+  sprintf("Among same-parent incoming citations, share from junior inventors: %.1f%%",
+          100 * d$share_cite_links_received_same_parent_from_less_senior),
+  sprintf("Among same-parent incoming citations, share from same-seniority inventors: %.1f%%",
+          100 * d$share_cite_links_received_same_parent_from_equal_senior),
+  sprintf("Among same-parent incoming citations, share from senior inventors: %.1f%%",
+          100 * d$share_cite_links_received_same_parent_from_more_senior),
   "",
   sprintf("Patents with any co-inventor: %.1f%%", 100 * d$share_patents_with_any_coinventor),
   sprintf("Patents with same-parent collaborators: %.1f%%", 100 * d$share_patents_with_same_parent_collab),

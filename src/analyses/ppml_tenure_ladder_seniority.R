@@ -560,21 +560,45 @@ parse_tenure_terms <- function(tab) {
     select(-tenure_bin_chr)
 }
 
-run_ppml <- function(rhs, fe_part, data, wform = NULL, cluster_var = "vcov_cluster") {
-  fml <- as.formula(paste0("n_patents ~ ", rhs, " | ", fe_part))
+run_ppml <- function(rhs, fe_part = NA_character_, data, wform = NULL, cluster_var = "vcov_cluster") {
+  rhs_part <- paste0("n_patents ~ ", rhs)
+
+  if (
+    is.null(fe_part) ||
+    length(fe_part) == 0 ||
+    is.na(fe_part) ||
+    trimws(fe_part) %in% c("", "0", "none", "None", "NONE")
+  ) {
+    fml <- as.formula(rhs_part)
+    fe_label <- "no fixed effects"
+  } else {
+    fml <- as.formula(paste0(rhs_part, " | ", fe_part))
+    fe_label <- fe_part
+  }
+
   vcov_fml <- stats::as.formula(paste0("~", cluster_var))
 
   ts_msg("Running PPML formula:", deparse(fml))
+  ts_msg("  FE part:", fe_label)
   ts_msg("  Rows:", nrow(data),
          "| users:", dplyr::n_distinct(data$user_id),
          "| clusters:", dplyr::n_distinct(data[[cluster_var]]),
          "| positive outcome rows:", sum(data$n_patents > 0, na.rm = TRUE))
 
   tryCatch({
-    fit <- fixest::fepois(fml, data = data, vcov = vcov_fml, weights = wform, notes = FALSE, warn = FALSE)
+    fit <- fixest::fepois(
+      fml,
+      data = data,
+      vcov = vcov_fml,
+      weights = wform,
+      notes = FALSE,
+      warn = FALSE
+    )
+
     if (!is.null(fit$collin.var) && length(fit$collin.var) > 0) {
       ts_msg("Collinear variables dropped by fixest:", paste(fit$collin.var, collapse = "; "))
     }
+
     fit
   }, error = function(e) {
     ts_msg("MODEL FAILED:", deparse(fml), "|", conditionMessage(e))
@@ -583,6 +607,9 @@ run_ppml <- function(rhs, fe_part, data, wform = NULL, cluster_var = "vcov_clust
 }
 
 ALLOWED_SPECS_WITH_USER_FE <- c(
+  "no_fe",
+  "year_fe_only",
+  "user_fe_only",
   "baseline_user_year",
   "plus_parent_fe",
   "plus_metro_fe",
@@ -592,6 +619,9 @@ ALLOWED_SPECS_WITH_USER_FE <- c(
 )
 
 fe_ladder_user <- list(
+  list(spec_name = "no_fe",                           fe = NA_character_),
+  list(spec_name = "year_fe_only",                    fe = "year_fe"),
+  list(spec_name = "user_fe_only",                    fe = "user_id"),
   list(spec_name = "baseline_user_year",              fe = "user_id + year_fe"),
   list(spec_name = "plus_parent_fe",                  fe = "user_id + year_fe + parent_fe"),
   list(spec_name = "plus_metro_fe",                   fe = "user_id + year_fe + metro_fe"),
@@ -603,9 +633,22 @@ fe_ladder_user <- list(
 validate_fe_ladder <- function(fe_ladder) {
   ladder_specs <- vapply(fe_ladder, function(x) x$spec_name, character(1))
   ts_msg("Validating seniority FE ladder:", paste(ladder_specs, collapse = ", "))
-  if (!setequal(ladder_specs, ALLOWED_SPECS_WITH_USER_FE)) {
-    stop("[ERROR] FE ladder does not match allowed seniority-valid specifications.")
+
+  if (anyDuplicated(ladder_specs)) {
+    stop("[ERROR] Duplicate specification names in seniority FE ladder.")
   }
+
+  if (!setequal(ladder_specs, ALLOWED_SPECS_WITH_USER_FE)) {
+    missing_specs <- setdiff(ALLOWED_SPECS_WITH_USER_FE, ladder_specs)
+    extra_specs   <- setdiff(ladder_specs, ALLOWED_SPECS_WITH_USER_FE)
+
+    stop(paste0(
+      "[ERROR] FE ladder does not match allowed seniority-valid specifications. ",
+      "Missing: ", paste(missing_specs, collapse = ", "),
+      " | Extra: ", paste(extra_specs, collapse = ", ")
+    ))
+  }
+
   invisible(TRUE)
 }
 
@@ -700,7 +743,12 @@ make_profile_from_simple_fit <- function(fit, dd_pre, analysis_name, window_tag,
       window = window_tag,
       sample_tag = sample_tag,
       cohort_tag = "all_cohorts",
-      user_fe_tag = "with_user_fe",
+      user_fe_tag = case_when(
+        spec_name == "no_fe" ~ "no_fe",
+        spec_name == "year_fe_only" ~ "year_fe_only",
+        spec_name == "user_fe_only" ~ "user_fe_only",
+        TRUE ~ "with_user_fe"
+      ),
       profile_source = profile_source,
       profile = profile,
       group_value = group_value,
@@ -891,7 +939,12 @@ make_pooled_row <- function(model, term, raw_term, tenure_bin, estimate, se,
     window = window_tag,
     sample_tag = sample_tag,
     cohort_tag = "all_cohorts",
-    user_fe_tag = "with_user_fe",
+    user_fe_tag = case_when(
+      spec_name == "no_fe" ~ "no_fe",
+      spec_name == "year_fe_only" ~ "year_fe_only",
+      spec_name == "user_fe_only" ~ "user_fe_only",
+      TRUE ~ "with_user_fe"
+    ),
     profile_source = "pooled",
     profile = profile,
     group_value = group_value,
@@ -2179,7 +2232,7 @@ write_csv(
     run_cohorts_exported_but_ignored = RUN_COHORTS_EXPORTED_BUT_IGNORED,
     run_lifecycle_profiles = RUN_LIFECYCLE_PROFILES,
     run_full_unsplit = RUN_FULL_UNSPLIT,
-    profile_design = "seniority_valid_same_sample_baseline; parent_fe; metro_fe; mp_fe; parent_seniority_fe; mp_plus_parent_seniority_fe; separate_top20; separate_complement; pooled_saturated_top_complement_interaction",
+    profile_design = "seniority_valid_same_sample_no_fe; year_fe_only; user_fe_only; baseline_user_year; parent_fe; metro_fe; mp_fe; parent_seniority_fe; mp_plus_parent_seniority_fe; separate_top20; separate_complement; pooled_saturated_top_complement_interaction",
     top10_firm_definition = "current-year parent_fe_id ranked by total patents in the window",
     density_split = "first_metro_density_topcomp_from_final_revelio_metro_density_crosswalk",
     ppml_plot_scale = "level_scale_mean_ref_times_exp_beta",

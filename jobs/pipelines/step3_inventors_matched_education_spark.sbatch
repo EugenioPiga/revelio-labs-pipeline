@@ -25,7 +25,10 @@ echo "============================================================"
 # ============================================================
 # 1) Conda env
 # ============================================================
+# Temporarily disable nounset around conda activation.
+set +u
 source "$HOME/miniconda/bin/activate" revelio
+set -u
 echo "[INFO] Using python: $(which python)"
 python -V
 
@@ -57,7 +60,7 @@ export SPARK_EVENTLOG_ENABLED="false"
 # ============================================================
 # 5) Paths
 # ============================================================
-CODE_DIR="$HOME/revelio_labs"
+CODE_DIR="$HOME/innovation_linkedin/src/pipelines"
 
 # This is the modified Step 2 output you already created.
 STEP2_DIR="/labs/khanna/linkedin_202507/processed/step2_output/inventors_matched_positions_spark"

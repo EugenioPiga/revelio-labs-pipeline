@@ -14,7 +14,10 @@ set -euo pipefail
 mkdir -p logs
 
 # 1) Conda env
+# Temporarily disable nounset around conda activation.
+set +u
 source "$HOME/miniconda/bin/activate" revelio
+set -u
 echo "[INFO] Using python: $(which python)"
 python -V
 

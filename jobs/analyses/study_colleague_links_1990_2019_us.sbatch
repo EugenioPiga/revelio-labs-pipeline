@@ -32,7 +32,7 @@ export TMPDIR="$TMP_BASE"
 export TMP="$TMP_BASE"
 export TEMP="$TMP_BASE"
 
-R_SCRIPT="/home/epiga/revelio_labs/study_colleague_links_1990_2019_us.R"
+R_SCRIPT="$HOME/innovation_linkedin/src/analyses/study_colleague_links_1990_2019_us.R"
 LOG_DIR="/home/epiga/revelio_labs/logs/colleague_links_us"
 OUT_DIR="/home/epiga/revelio_labs/output/colleague_links_1990_2019_us"
 

@@ -2,8 +2,8 @@
 ###############################################################################
 # step6_colleague_citation_collaboration_measures.py
 #
-# Add colleague citation and collaboration measures to the final inventor-year
-# panel.
+# Add colleague citation, incoming-citation, and collaboration measures to the
+# final inventor-year panel.
 #
 # Input panel:
 #   /labs/khanna/linkedin_202507/processed/inventor_year_merged_v2_onet_naics
@@ -13,31 +13,91 @@
 #
 # What this does:
 #   1. Reads the final merged inventor-year panel with O*NET / NAICS variables.
+#
 #   2. Builds inventor-year attributes:
 #        parent_for_links = coalesce(current_parent_rcid,
 #                                    last_parent_rcid,
 #                                    first_parent_rcid)
 #        metro_for_links  = coalesce(last_metro_area, first_metro_area)
 #        seniority_floor  = floor(avg_seniority)
-#   3. Uses patent-inventor matches and citation edges to compute:
-#        A. Citation-to-colleague measures.
-#        B. Collaboration-with-colleague measures.
-#   4. Computes both:
-#        - inventor-link counts
-#        - patent-level counts
-#   5. Splits colleague links into:
+#
+#   3. Uses patent-inventor matches and USPTO citation edges to construct
+#      inventor-to-inventor citation links:
+#        i = citing inventor
+#        j = cited inventor
+#
+#      Citation year is defined as the filing year of the citing patent.
+#
+#   4. Computes outgoing citation-to-colleague measures, grouped by the citing
+#      inventor i and year. These answer:
+#
+#        "Whom does the focal inventor cite?"
+#
+#      The outgoing citation measures split cited colleagues into:
 #        - same parent
 #        - same parent x metro
-#        - more senior colleague
-#        - less/equal senior colleague
-#   6. Joins all measures back to the inventor-year panel.
-#   7. Publishes final output as inventor_year_merged_v2.
+#        - more senior cited colleague
+#        - less/equal senior cited colleague
+#
+#   5. Computes incoming citation-received measures, grouped by the cited/focal
+#      inventor j and citing year. These answer:
+#
+#        "Who cites the focal inventor?"
+#
+#      The incoming citation measures split citing colleagues into:
+#        - same parent
+#        - same parent x metro
+#        - citing inventor more senior than the focal inventor
+#        - citing inventor less senior than the focal inventor
+#        - citing inventor equal seniority to the focal inventor
+#        - citing inventor less/equal senior than the focal inventor
+#
+#      These variables are designed to study whether, over tenure, an inventor's
+#      work is increasingly cited by junior or senior colleagues inside the same
+#      parent firm.
+#
+#   6. Computes both link-level and patent-level citation measures:
+#        - link-level counts count inventor-to-inventor citation links;
+#        - patent-level counts count distinct cited or citing patents satisfying
+#          each same-parent / relative-seniority condition.
+#
+#   7. Builds co-inventor collaboration links from patent-inventor matches.
+#      Collaboration year is the filing year of the focal patent.
+#
+#   8. Computes collaboration-with-colleague measures, grouped by focal inventor
+#      and year. These split collaborators into:
+#        - same parent
+#        - same parent x metro
+#        - more senior collaborator
+#        - less/equal senior collaborator
+#
+#   9. Joins all outgoing citation, incoming citation, and collaboration measures
+#      back to the inventor-year panel.
+#
+#  10. Creates share variables:
+#        - outgoing citation shares;
+#        - incoming citation-received shares;
+#        - incoming citation-received shares conditional on same-parent citations;
+#        - patent-level incoming citation shares;
+#        - collaboration link shares;
+#        - collaboration patent shares.
+#
+#  11. Publishes final output as inventor_year_merged_v2.
+#
+# Key interpretation:
+#   Existing outgoing variables answer:
+#     "Over tenure, does inventor i cite senior or junior colleagues?"
+#
+#   New incoming variables answer:
+#     "Over tenure, is inventor j cited by senior or junior colleagues?"
 #
 # Notes:
 #   - Citation year is the filing year of the citing patent.
 #   - Collaboration year is the filing year of the focal patent.
 #   - Seniority comparison uses floor(avg_seniority).
 #   - Self-links are excluded: i != j.
+#   - Parent comparisons use parent_for_links.
+#   - Metro comparisons use metro_for_links.
 ###############################################################################
 
 import argparse
@@ -501,6 +561,52 @@ def main():
         .withColumn("same_parent_metro_less_equal_senior", F.col("same_parent_metro") & F.col("j_less_equal_senior"))
     )
 
+
+    # -------------------------------------------------------------------------
+    # Incoming-citation perspective:
+    #   i = citing inventor
+    #   j = cited / focal inventor
+    #
+    # These flags classify whether citations RECEIVED by j come from inventors
+    # who are senior, junior, equal, or less/equal senior relative to j.
+    # -------------------------------------------------------------------------
+
+    citation_links = (
+        citation_links
+        .withColumn(
+            "i_more_senior_than_j",
+            F.col("i_seniority_floor").isNotNull()
+            & F.col("j_seniority_floor").isNotNull()
+            & (F.col("i_seniority_floor") > F.col("j_seniority_floor"))
+        )
+        .withColumn(
+            "i_less_senior_than_j",
+            F.col("i_seniority_floor").isNotNull()
+            & F.col("j_seniority_floor").isNotNull()
+            & (F.col("i_seniority_floor") < F.col("j_seniority_floor"))
+        )
+        .withColumn(
+            "i_equal_senior_to_j",
+            F.col("i_seniority_floor").isNotNull()
+            & F.col("j_seniority_floor").isNotNull()
+            & (F.col("i_seniority_floor") == F.col("j_seniority_floor"))
+        )
+        .withColumn(
+            "i_less_equal_senior_than_j",
+            F.col("i_seniority_floor").isNotNull()
+            & F.col("j_seniority_floor").isNotNull()
+            & (F.col("i_seniority_floor") <= F.col("j_seniority_floor"))
+        )
+        .withColumn("same_parent_from_more_senior", F.col("same_parent") & F.col("i_more_senior_than_j"))
+        .withColumn("same_parent_from_less_senior", F.col("same_parent") & F.col("i_less_senior_than_j"))
+        .withColumn("same_parent_from_equal_senior", F.col("same_parent") & F.col("i_equal_senior_to_j"))
+        .withColumn("same_parent_from_less_equal_senior", F.col("same_parent") & F.col("i_less_equal_senior_than_j"))
+        .withColumn("same_parent_metro_from_more_senior", F.col("same_parent_metro") & F.col("i_more_senior_than_j"))
+        .withColumn("same_parent_metro_from_less_senior", F.col("same_parent_metro") & F.col("i_less_senior_than_j"))
+        .withColumn("same_parent_metro_from_equal_senior", F.col("same_parent_metro") & F.col("i_equal_senior_to_j"))
+        .withColumn("same_parent_metro_from_less_equal_senior", F.col("same_parent_metro") & F.col("i_less_equal_senior_than_j"))
+    )
+
     check_keys(citation_links, "citation_links", do_count=False)
 
     # =========================================================================
@@ -561,9 +667,88 @@ def main():
         )
     )
 
+
+    # -------------------------------------------------------------------------
+    # Incoming citation measures:
+    #   grouped by j_user_id_key, the cited / focal inventor.
+    #
+    # Interpretation:
+    #   n_cite_links_received_same_parent_from_less_senior
+    #   = number of citation links received by inventor j from junior inventors
+    #     in the same parent firm, in the citing patent's filing year.
+    # -------------------------------------------------------------------------
+
+    incoming_citation_link_counts = (
+        citation_links
+        .groupBy(F.col("j_user_id_key").alias("user_id_key"), "year")
+        .agg(
+            F.count("*").alias("n_cite_links_received_total"),
+
+            sum_flag(F.col("same_parent"), "n_cite_links_received_same_parent"),
+            sum_flag(F.col("same_parent_from_more_senior"), "n_cite_links_received_same_parent_from_more_senior"),
+            sum_flag(F.col("same_parent_from_less_senior"), "n_cite_links_received_same_parent_from_less_senior"),
+            sum_flag(F.col("same_parent_from_equal_senior"), "n_cite_links_received_same_parent_from_equal_senior"),
+            sum_flag(F.col("same_parent_from_less_equal_senior"), "n_cite_links_received_same_parent_from_less_equal_senior"),
+
+            sum_flag(F.col("same_parent_metro"), "n_cite_links_received_same_parent_metro"),
+            sum_flag(F.col("same_parent_metro_from_more_senior"), "n_cite_links_received_same_parent_metro_from_more_senior"),
+            sum_flag(F.col("same_parent_metro_from_less_senior"), "n_cite_links_received_same_parent_metro_from_less_senior"),
+            sum_flag(F.col("same_parent_metro_from_equal_senior"), "n_cite_links_received_same_parent_metro_from_equal_senior"),
+            sum_flag(F.col("same_parent_metro_from_less_equal_senior"), "n_cite_links_received_same_parent_metro_from_less_equal_senior"),
+        )
+    )
+
+    # Patent-level incoming measures:
+    # whether a citing patent includes at least one same-parent senior/junior
+    # inventor citing the focal inventor.
+    incoming_citation_patent_flags = (
+        citation_links
+        .groupBy(
+            F.col("j_user_id_key").alias("user_id_key"),
+            "year",
+            "citing_patent_id"
+        )
+        .agg(
+            F.max(F.when(F.col("same_parent"), 1).otherwise(0)).alias("p_received_same_parent"),
+            F.max(F.when(F.col("same_parent_from_more_senior"), 1).otherwise(0)).alias("p_received_same_parent_from_more_senior"),
+            F.max(F.when(F.col("same_parent_from_less_senior"), 1).otherwise(0)).alias("p_received_same_parent_from_less_senior"),
+            F.max(F.when(F.col("same_parent_from_equal_senior"), 1).otherwise(0)).alias("p_received_same_parent_from_equal_senior"),
+            F.max(F.when(F.col("same_parent_from_less_equal_senior"), 1).otherwise(0)).alias("p_received_same_parent_from_less_equal_senior"),
+
+            F.max(F.when(F.col("same_parent_metro"), 1).otherwise(0)).alias("p_received_same_parent_metro"),
+            F.max(F.when(F.col("same_parent_metro_from_more_senior"), 1).otherwise(0)).alias("p_received_same_parent_metro_from_more_senior"),
+            F.max(F.when(F.col("same_parent_metro_from_less_senior"), 1).otherwise(0)).alias("p_received_same_parent_metro_from_less_senior"),
+            F.max(F.when(F.col("same_parent_metro_from_equal_senior"), 1).otherwise(0)).alias("p_received_same_parent_metro_from_equal_senior"),
+            F.max(F.when(F.col("same_parent_metro_from_less_equal_senior"), 1).otherwise(0)).alias("p_received_same_parent_metro_from_less_equal_senior"),
+        )
+    )
+
+    incoming_citation_patent_counts = (
+        incoming_citation_patent_flags
+        .groupBy("user_id_key", "year")
+        .agg(
+            F.countDistinct("citing_patent_id").alias("n_citing_patents_received_total"),
+
+            F.sum("p_received_same_parent").alias("n_citing_patents_received_same_parent"),
+            F.sum("p_received_same_parent_from_more_senior").alias("n_citing_patents_received_same_parent_from_more_senior"),
+            F.sum("p_received_same_parent_from_less_senior").alias("n_citing_patents_received_same_parent_from_less_senior"),
+            F.sum("p_received_same_parent_from_equal_senior").alias("n_citing_patents_received_same_parent_from_equal_senior"),
+            F.sum("p_received_same_parent_from_less_equal_senior").alias("n_citing_patents_received_same_parent_from_less_equal_senior"),
+
+            F.sum("p_received_same_parent_metro").alias("n_citing_patents_received_same_parent_metro"),
+            F.sum("p_received_same_parent_metro_from_more_senior").alias("n_citing_patents_received_same_parent_metro_from_more_senior"),
+            F.sum("p_received_same_parent_metro_from_less_senior").alias("n_citing_patents_received_same_parent_metro_from_less_senior"),
+            F.sum("p_received_same_parent_metro_from_equal_senior").alias("n_citing_patents_received_same_parent_metro_from_equal_senior"),
+            F.sum("p_received_same_parent_metro_from_less_equal_senior").alias("n_citing_patents_received_same_parent_metro_from_less_equal_senior"),
+        )
+    )
+
+
     citation_measures = (
         citation_link_counts
         .join(citation_patent_counts, on=["user_id_key", "year"], how="outer")
+        .join(incoming_citation_link_counts, on=["user_id_key", "year"], how="outer")
+        .join(incoming_citation_patent_counts, on=["user_id_key", "year"], how="outer")
     )
 
     # =========================================================================
@@ -752,6 +937,57 @@ def main():
         out = f"share_cited_patents_{c}"
         if num in final.columns:
             final = final.withColumn(out, safe_divide(num, cited_pat_den))
+
+    # Incoming citation link shares over all incoming citation links.
+    received_link_den = "n_cite_links_received_total"
+    for c in [
+        "same_parent",
+        "same_parent_from_more_senior",
+        "same_parent_from_less_senior",
+        "same_parent_from_equal_senior",
+        "same_parent_from_less_equal_senior",
+        "same_parent_metro",
+        "same_parent_metro_from_more_senior",
+        "same_parent_metro_from_less_senior",
+        "same_parent_metro_from_equal_senior",
+        "same_parent_metro_from_less_equal_senior",
+    ]:
+        num = f"n_cite_links_received_{c}"
+        out = f"share_cite_links_received_{c}"
+        if num in final.columns and received_link_den in final.columns:
+            final = final.withColumn(out, safe_divide(num, received_link_den))
+
+    # Incoming citation link shares conditional on being from the same parent.
+    same_parent_received_den = "n_cite_links_received_same_parent"
+    for c in [
+        "same_parent_from_more_senior",
+        "same_parent_from_less_senior",
+        "same_parent_from_equal_senior",
+        "same_parent_from_less_equal_senior",
+    ]:
+        num = f"n_cite_links_received_{c}"
+        out = f"share_cite_links_received_{c}_cond_same_parent"
+        if num in final.columns and same_parent_received_den in final.columns:
+            final = final.withColumn(out, safe_divide(num, same_parent_received_den))
+
+    # Incoming citing-patent shares over all citing patents received.
+    received_citing_pat_den = "n_citing_patents_received_total"
+    for c in [
+        "same_parent",
+        "same_parent_from_more_senior",
+        "same_parent_from_less_senior",
+        "same_parent_from_equal_senior",
+        "same_parent_from_less_equal_senior",
+        "same_parent_metro",
+        "same_parent_metro_from_more_senior",
+        "same_parent_metro_from_less_senior",
+        "same_parent_metro_from_equal_senior",
+        "same_parent_metro_from_less_equal_senior",
+    ]:
+        num = f"n_citing_patents_received_{c}"
+        out = f"share_citing_patents_received_{c}"
+        if num in final.columns and received_citing_pat_den in final.columns:
+            final = final.withColumn(out, safe_divide(num, received_citing_pat_den))
 
     # Collaboration link shares.
     collab_link_den = "n_collab_links_total"

@@ -20,7 +20,10 @@ echo "[INFO] CPUs=${SLURM_CPUS_PER_TASK} MEM=${SLURM_MEM_PER_NODE:-NA}"
 # =========================================================
 # Environment
 # =========================================================
+# Temporarily disable nounset around conda activation.
+set +u
 source ~/miniconda/bin/activate revelio
+set -u
 echo "[INFO] Using Python from: $(which python)"
 python --version
 

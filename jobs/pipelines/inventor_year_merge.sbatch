@@ -18,7 +18,10 @@ echo "[INFO] Job started on $(hostname) at $(date)"
 # =========================================================
 # Environment
 # =========================================================
+# Temporarily disable nounset around conda activation.
+set +u
 source ~/miniconda/bin/activate revelio
+set -u
 echo "[INFO] Using Python from: $(which python)"
 python --version
 
