@@ -1,0 +1,54 @@
+FINAL RUN
+=========
+
+Run ID:
+owner_backbone_refresh_20260715_021137
+
+
+FINAL OUTPUT
+============
+
+/home/epiga/revelio_labs/output/foodservice_722_owner_backbone_refresh_v1/final_linkage/owner_backbone_refresh_20260715_021137
+
+
+PRIMARY BACKBONE
+================
+
+/home/epiga/revelio_labs/input/backbones/restaurant_backbone_enriched_20260714_073513_brand_compat.parquet
+
+SHA-256:
+aa906b0daab814bfdfb18a32d0993e97045f707a64d2285674400244959dc3fe
+
+
+FOOD-SERVICE SPELLS
+===================
+
+/home/epiga/revelio_labs/output/us_foodservice_722_histories_v1/us_foodservice_722_spells_v3
+
+
+PERSON ORIGIN VARIABLES
+=======================
+
+/home/epiga/revelio_labs/output/us_foodservice_722_histories_v1/us_foodservice_722_people_origin_v4
+
+
+REUSABLE REVELIO LOCATION KEYS
+==============================
+
+/home/epiga/revelio_labs/output/foodservice_722_backbone_match_v1/candidate_pairs/keys_geo_20260709_001620/revelio_entity_location_keys
+
+
+HISTORICAL EXACT CROSSWALK
+==========================
+
+/home/epiga/revelio_labs/output/foodservice_722_backbone_match_v1/accepted_crosswalk/exact_tier12_20260709_030722/accepted_crosswalk
+
+
+IMPORTANT
+=========
+
+The licensed and restricted source inputs listed above are not included in
+this research sharing package.
+
+The final derived datasets should be shared only with recipients who are
+authorized to access them.

@@ -1,0 +1,13 @@
+V2 CHANGES
+==========
+
+- Implements the conservative U.S.-origin definition agreed with Brett:
+  both education and employment histories must be present; every record must
+  have a valid country; and every country must be the United States.
+- Leaves incomplete histories unassigned in the preferred definition.
+- Preserves a broader robustness definition that assigns all workers with no
+  observed non-U.S. signal to the United States.
+- Adds diagnostic flags for history presence, country completeness, and
+  unresolved non-U.S. signals.
+- Uses a new project and output directory; no V1 or final-linkage files are
+  overwritten.
